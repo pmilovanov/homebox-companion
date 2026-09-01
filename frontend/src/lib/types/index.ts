@@ -133,6 +133,10 @@ export interface ReviewItem extends ItemCore, ItemExtended {
 	custom_fields?: Record<string, string> | null;
 	/** Duplicate match info if serial matches an existing item */
 	duplicate_match?: DuplicateMatch | null;
+	/** True when asset_id was read from a label in the photo rather than typed in */
+	asset_id_detected?: boolean;
+	/** True when a label was read but already claimed by another item in this batch */
+	asset_id_duplicate?: boolean;
 }
 
 /** Item confirmed by user, ready for submission */
@@ -266,6 +270,11 @@ export interface DetectionResponse {
 	items: DetectedItem[];
 	message: string;
 	compressed_images: CompressedImage[];
+	/**
+	 * Asset IDs read from pre-printed QR labels visible in the photos, deduplicated.
+	 * Exactly one means the label belongs to the photographed item; several is ambiguous.
+	 */
+	detected_asset_ids: string[];
 }
 
 /** Detected item from AI (same as ItemCore + ItemExtended) */

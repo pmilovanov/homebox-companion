@@ -372,6 +372,24 @@ When enabled, a print button appears on the post-creation screen for each item. 
 </details>
 
 <details>
+<summary>🏷️ Pre-printed Asset ID Labels</summary>
+
+Print QR labels ahead of time, stick one on each item, and photograph the item as usual. If a label is visible in the photo, its ID is read and pre-filled as the item's asset ID on the review screen, marked as read from the label. You can still type or scan one by hand.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HBC_ASSET_ID_LABEL_PATTERN` | `^9\d{13}$` | Regex a QR payload must match, in full, to be accepted as an asset ID. Empty disables detection. |
+| `HBC_ASSET_ID_AUTO_ASSIGN` | `false` | After each batch create, ask Homebox to assign asset IDs to every item in the group that lacks one |
+
+The pattern is strict on purpose: product packaging is full of QR codes, and a loose pattern would file a marketing URL as an item's asset ID. Both a bare ID and a Homebox `/a/{id}` URL are accepted; the pattern is applied after the ID is extracted.
+
+**Homebox server prerequisite:** Set `HBOX_OPTIONS_AUTO_INCREMENT_ASSET_ID=false` on your Homebox instance. By default Homebox assigns every new item the next asset ID above the highest one in the group. Once a printed label is in use, "the next one" is the next label still sitting on your sheet, and an item created without a label will be handed it. `HBC_ASSET_ID_AUTO_ASSIGN` does not change this; it only controls a separate, group-wide sweep after batch creation.
+
+Homebox does not reject duplicate asset IDs. When an ID you are about to assign is already on another item, the asset ID field warns you.
+
+</details>
+
+<details>
 <summary>AI Output Customization</summary>
 
 Customize how AI formats detected item fields. Set via environment variables or the Settings page (UI takes priority).

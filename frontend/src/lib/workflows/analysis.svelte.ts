@@ -178,6 +178,7 @@ export class AnalysisService {
 						image,
 						items: response.items,
 						compressedImages: response.compressed_images || [],
+						detectedAssetIds: response.detected_asset_ids || [],
 					};
 				} catch (error) {
 					// Re-throw abort errors to be handled at the top level
@@ -231,6 +232,11 @@ export class AnalysisService {
 				? this.defaultTagId
 				: null;
 
+		// Labels already handed to an item in this batch. The same sticker showing
+		// up in two photos means two shots of one item, not two items.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- Local accumulator, not reactive state
+		const assignedLabels = new Set<string>();
+
 		// Process results
 		for (const result of results) {
 			if (result.success) {
@@ -240,6 +246,40 @@ export class AnalysisService {
 				// First compressed image is the primary, rest are additional
 				const primaryCompressed = compressedImages[0];
 				const additionalCompressed = compressedImages.slice(1);
+
+				// Which asset ID this photo's item gets, if any.
+				//
+				// An ID typed on the capture card wins, under the same single-item rule as
+				// before. Failing that, a label read from the photo applies when the photo
+				// yielded exactly one item and exactly one label was seen: one item, one
+				// sticker, nothing to disambiguate. Several labels, or several items, is
+				// left blank for the review screen rather than guessed.
+				const manualAssetId =
+					!result.image.separateItems && result.items.length === 1
+						? (result.image.assetId ?? undefined)
+						: undefined;
+				let assetId = manualAssetId;
+				let assetIdDetected = false;
+				let assetIdDuplicate = false;
+				const labels = result.detectedAssetIds;
+				if (!assetId && labels.length === 1 && result.items.length === 1) {
+					const label = labels[0];
+					if (assignedLabels.has(label)) {
+						assetIdDuplicate = true;
+						log.warn(
+							`Label ${label} in image ${result.imageIndex + 1} was already assigned in this batch; leaving blank`
+						);
+					} else {
+						assignedLabels.add(label);
+						assetId = label;
+						assetIdDetected = true;
+						log.info(`Image ${result.imageIndex + 1}: asset ID ${label} read from label`);
+					}
+				} else if (labels.length > 0) {
+					log.info(
+						`Image ${result.imageIndex + 1}: ${labels.length} label(s) seen but not assigned (${result.items.length} item(s), manual=${manualAssetId ?? 'none'})`
+					);
+				}
 
 				for (const item of result.items) {
 					// Add default tag if configured and valid
@@ -266,11 +306,9 @@ export class AnalysisService {
 						compressedDataUrl,
 						compressedAdditionalDataUrls:
 							compressedAdditionalDataUrls.length > 0 ? compressedAdditionalDataUrls : undefined,
-						// Copy asset_id from source image (only for single-item mode)
-						asset_id:
-							!result.image.separateItems && result.items.length === 1
-								? (result.image.assetId ?? undefined)
-								: undefined,
+						asset_id: assetId,
+						asset_id_detected: assetIdDetected || undefined,
+						asset_id_duplicate: assetIdDuplicate || undefined,
 					});
 				}
 			}

@@ -16,6 +16,13 @@ export interface UploadOptions {
 	signal?: AbortSignal;
 }
 
+/** Result of checking whether an asset ID is already on an item. */
+export interface AssetIdLookup {
+	found: boolean;
+	id?: string;
+	name?: string;
+}
+
 export interface ItemUpdateData {
 	assetId?: string | null;
 	name?: string;
@@ -26,6 +33,13 @@ export interface ItemUpdateData {
 export const items = {
 	list: (locationId?: string, signal?: AbortSignal) =>
 		request<ItemSummary[]>(`/items${locationId ? `?location_id=${locationId}` : ''}`, { signal }),
+
+	/**
+	 * Look up an item by asset ID, to warn before assigning one that is taken.
+	 * Returns { found: false } when nothing carries the ID.
+	 */
+	byAssetId: (assetId: string, signal?: AbortSignal) =>
+		request<AssetIdLookup>(`/items/by-asset-id/${encodeURIComponent(assetId)}`, { signal }),
 
 	create: (data: BatchCreateRequest, options: CreateOptions = {}) =>
 		request<BatchCreateResponse>('/items', {

@@ -29,7 +29,14 @@
 	import InfoTooltip from '$lib/components/InfoTooltip.svelte';
 	import { workflowLogger as log } from '$lib/utils/logger';
 	import { longpress } from '$lib/actions/longpress';
-	import { SquarePen, ImageIcon, ChevronsRight, Check } from 'lucide-svelte';
+	import {
+		SquarePen,
+		ImageIcon,
+		ChevronsRight,
+		Check,
+		ScanLine,
+		TriangleAlert,
+	} from 'lucide-svelte';
 
 	// Capture limits (loaded from config, with safe defaults)
 	let maxImages = $state(30);
@@ -268,6 +275,9 @@
 	function handleAssetIdChange(value: string | null) {
 		if (!editedItem) return;
 		editedItem.asset_id = value;
+		// Typing over a detected id makes it the user's, not the photo's
+		editedItem.asset_id_detected = false;
+		editedItem.asset_id_duplicate = false;
 	}
 
 	async function handleAiCorrection(correctionPrompt: string) {
@@ -459,7 +469,26 @@
 				/>
 
 				<!-- Asset ID field -->
-				<AssetIdInput value={editedItem.asset_id ?? null} onChange={handleAssetIdChange} />
+				<div>
+					<AssetIdInput value={editedItem.asset_id ?? null} onChange={handleAssetIdChange} />
+					{#if editedItem.asset_id_detected && editedItem.asset_id}
+						<p
+							class="mt-1 flex items-center gap-1 text-caption text-success-500"
+							aria-live="polite"
+						>
+							<ScanLine size={12} strokeWidth={2} />
+							Read from the label in the photo
+						</p>
+					{:else if editedItem.asset_id_duplicate}
+						<p
+							class="mt-1 flex items-center gap-1 text-caption text-warning-400"
+							aria-live="polite"
+						>
+							<TriangleAlert size={12} strokeWidth={2} />
+							This label was also read from another photo in this batch, so it was not applied here
+						</p>
+					{/if}
+				</div>
 
 				<!-- Tags with chip selection -->
 				<TagSelector selectedIds={editedItem.tag_ids ?? []} onToggle={toggleTag} />
