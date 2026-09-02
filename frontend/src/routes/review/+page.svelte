@@ -3,7 +3,9 @@
 	import { resolve } from '$app/paths';
 	import { onMount, onDestroy } from 'svelte';
 	import { vision } from '$lib/api/vision';
+	import { items as itemsApi } from '$lib/api/items';
 	import { getConfig } from '$lib/api/settings';
+	import { assetIdKey } from '$lib/utils/assetId';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { scanWorkflow } from '$lib/workflows/scan.svelte';
 	import { createObjectUrlManager } from '$lib/utils/objectUrl';
@@ -64,6 +66,10 @@
 	let isProcessing = $state(false);
 	let allImages = $state<File[]>([]);
 	let showConfirmAllDialog = $state(false);
+
+	/** Asset ID clashes among the items Confirm All would write, once looked up. */
+	let confirmAllWarning = $state<string | null>(null);
+	let confirmAllCheck: AbortController | null = null;
 
 	// Track original images to detect modifications (for invalidating compressed URLs)
 	let originalImageSet = $state<Set<File>>(new Set());
@@ -243,6 +249,75 @@
 
 	function handleLongPressConfirm() {
 		showConfirmAllDialog = true;
+		void checkConfirmAllAssetIds();
+	}
+
+	function closeConfirmAllDialog() {
+		confirmAllCheck?.abort();
+		confirmAllCheck = null;
+		confirmAllWarning = null;
+		showConfirmAllDialog = false;
+	}
+
+	/**
+	 * Confirming items one at a time shows a warning under the asset ID field when
+	 * the ID is already on another item. Confirm All never shows that field, so the
+	 * same check runs here for every item it is about to write, plus one for two
+	 * items in the batch carrying the same ID. Advisory, like the field: a lookup
+	 * that fails says nothing rather than guessing.
+	 */
+	async function checkConfirmAllAssetIds() {
+		confirmAllCheck?.abort();
+		const controller = new AbortController();
+		confirmAllCheck = controller;
+		confirmAllWarning = null;
+
+		const remaining = detectedItems
+			.slice(currentIndex)
+			.map((item, i) => (i === 0 && editedItem ? editedItem : item));
+		const keyOf = (item: ReviewItem) => (item.asset_id?.trim() ? assetIdKey(item.asset_id) : null);
+
+		// Same ID on two items of this batch, confirmed ones included
+		const counts: Record<string, number> = {};
+		for (const item of [...workflow.state.confirmedItems, ...remaining]) {
+			const key = keyOf(item);
+			if (key) counts[key] = (counts[key] ?? 0) + 1;
+		}
+		const shared = remaining.filter((item) => {
+			const key = keyOf(item);
+			return key !== null && counts[key] > 1;
+		}).length;
+
+		// IDs already on an item in Homebox, one lookup per distinct ID
+		const toCheck: Record<string, string> = {};
+		for (const item of remaining) {
+			const key = keyOf(item);
+			if (key && item.asset_id && !(key in toCheck)) toCheck[key] = item.asset_id.trim();
+		}
+		const taken: string[] = [];
+		await Promise.all(
+			Object.values(toCheck).map(async (id) => {
+				try {
+					const result = await itemsApi.byAssetId(id, controller.signal);
+					if (result.found) taken.push(result.name || 'another item');
+				} catch (error) {
+					log.debug(`Could not check asset ID ${id}:`, error);
+				}
+			})
+		);
+		if (controller.signal.aborted) return;
+
+		const parts: string[] = [];
+		if (shared > 0) {
+			parts.push(`${shared} of them share an asset ID with another item in this batch.`);
+		}
+		if (taken.length > 0) {
+			parts.push(
+				`${taken.length} asset ${taken.length === 1 ? 'ID is' : 'IDs are'} already used in Homebox (${taken.join(', ')}).`
+			);
+		}
+		confirmAllWarning =
+			parts.length > 0 ? `${parts.join(' ')} They will be written as they are.` : null;
 	}
 
 	function handleConfirmAll() {
@@ -251,7 +326,7 @@
 
 		// Use the workflow method that handles confirming all items including the current one
 		workflow.confirmAllRemainingItems(preparedItem ?? undefined);
-		showConfirmAllDialog = false;
+		closeConfirmAllDialog();
 
 		// Navigate to summary
 		goto(resolve('/summary'));
@@ -485,7 +560,7 @@
 							aria-live="polite"
 						>
 							<TriangleAlert size={12} strokeWidth={2} />
-							This label was also read from another photo in this batch, so it was not applied here
+							This label's ID is already on another item in this batch, so it was not applied here
 						</p>
 					{/if}
 				</div>
@@ -599,8 +674,9 @@
 	message="Confirm all {remainingCount} remaining {remainingCount === 1
 		? 'item'
 		: 'items'} and proceed to review & submit?"
+	warning={confirmAllWarning}
 	confirmLabel="Confirm All"
 	cancelLabel="Cancel"
 	onConfirm={handleConfirmAll}
-	onCancel={() => (showConfirmAllDialog = false)}
+	onCancel={closeConfirmAllDialog}
 />

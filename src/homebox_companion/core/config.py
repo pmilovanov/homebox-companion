@@ -146,12 +146,13 @@ class Settings(BaseSettings):
     # Pre-printed asset ID labels
     #
     # A QR payload found in a photo is accepted as an asset ID only if it matches
-    # this pattern in full. Kept strict on purpose: product packaging is full of
-    # QR codes, and a loose pattern would file a marketing URL as an item's asset
-    # ID. The default matches the 14-digit ids produced by the label generator
-    # (a leading 9, 9 digits of timestamp, 4 of batch counter). Empty disables
-    # detection.
-    asset_id_label_pattern: str = r"^9\d{13}$"
+    # this pattern in full, after hyphens are removed (Homebox ignores them).
+    # Kept strict on purpose: product packaging is full of QR codes, and a loose
+    # pattern would file a marketing URL as an item's asset ID. The default
+    # matches the 14-digit ids produced by the label generator (a leading 9,
+    # 9 digits of timestamp, 4 of batch counter); [0-9] rather than \d so that
+    # only ASCII digits count. Empty disables detection.
+    asset_id_label_pattern: str = r"^9[0-9]{13}$"
 
     # Whether to call Homebox's ensure-asset-ids action after each batch create.
     #
@@ -159,12 +160,11 @@ class Settings(BaseSettings):
     # max(existing) + 1 to *every* item in the group lacking an ID, including
     # items created outside this app, which is overreach for a post-create hook.
     #
-    # Note this flag does NOT, on its own, make pre-printed labels safe. Homebox
-    # also assigns max(existing) + 1 at item creation when its own
-    # HBOX_OPTIONS_AUTO_INCREMENT_ASSET_ID is on (the default). With labels in
-    # use that hands the next unlabelled item the first ID still sitting in the
-    # drawer. Anyone using pre-printed labels must set
-    # HBOX_OPTIONS_AUTO_INCREMENT_ASSET_ID=false on the Homebox server.
+    # This flag has no bearing on whether pre-printed labels are safe from
+    # Homebox's own numbering. Homebox assigns max(existing) + 1 itself, at
+    # creation (while its auto-increment option is on) and to every unnumbered
+    # entity at every startup (always). Labels are safe only while the highest
+    # asset ID in the group sits above every label printed; see the README.
     asset_id_auto_assign: bool = False
 
     # Auth rate limiting (brute-force protection)

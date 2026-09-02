@@ -39,13 +39,17 @@ def _compile(pattern: str) -> re.Pattern[str] | None:
 
 
 def parse_asset_id(payload: str) -> str:
-    """Extract an asset ID from a QR payload.
+    """Extract an asset ID from a QR payload, as Homebox would read it.
 
-    Accepts either a Homebox asset URL or a bare ID. Anything else comes back
-    trimmed and unchanged, for the pattern to reject.
+    Accepts either a Homebox asset URL or a bare ID. Hyphens are dropped
+    because Homebox drops them: it shows this ID as ``900-26843450000``, puts
+    that form in its own ``/a/`` URLs, and reads both spellings as one
+    integer. Anything else comes back trimmed and hyphen-free but otherwise
+    unchanged, for the pattern to reject.
     """
     match = _ASSET_URL.search(payload)
-    return match.group(1) if match else payload.strip()
+    candidate = match.group(1) if match else payload.strip()
+    return candidate.replace("-", "")
 
 
 def is_label_asset_id(candidate: str, pattern: str) -> bool:

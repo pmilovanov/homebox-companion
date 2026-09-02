@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { TriangleAlert } from 'lucide-svelte';
 	import Button from './Button.svelte';
 	import Card from './Card.svelte';
 
@@ -6,6 +7,8 @@
 		open: boolean;
 		title: string;
 		message: string;
+		/** Something to know before confirming, shown in warning colour under the message. */
+		warning?: string | null;
 		confirmLabel?: string;
 		cancelLabel?: string;
 		onConfirm: () => void;
@@ -16,6 +19,7 @@
 		open = false,
 		title,
 		message,
+		warning = null,
 		confirmLabel = 'Confirm',
 		cancelLabel = 'Cancel',
 		onConfirm,
@@ -49,9 +53,15 @@
 				<h2 id="dialog-title" class="mb-2 text-h3 text-neutral-100">
 					{title}
 				</h2>
-				<p class="mb-6 text-body text-neutral-400">
+				<p class="text-body text-neutral-400 {warning ? 'mb-3' : 'mb-6'}">
 					{message}
 				</p>
+				{#if warning}
+					<p class="mb-6 flex items-start gap-2 text-body-sm text-warning-400" role="alert">
+						<TriangleAlert size={16} strokeWidth={2} class="mt-0.5 shrink-0" />
+						<span>{warning}</span>
+					</p>
+				{/if}
 				<div class="flex gap-3">
 					<Button variant="secondary" full onclick={onCancel}>
 						{cancelLabel}

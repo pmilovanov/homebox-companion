@@ -20,9 +20,11 @@ from homebox_companion.tools.vision.labels import (
     parse_asset_id,
 )
 
-PATTERN = r"^9\d{13}$"
+PATTERN = r"^9[0-9]{13}$"
 LABEL = "90026843450000"
 OTHER_LABEL = "90026843450001"
+# How Homebox itself spells LABEL: split after three digits, in its UI and its /a/ URLs.
+HOMEBOX_SPELLING = "900-26843450000"
 
 
 def qr_png(payload: str, px: int, canvas: tuple[int, int] | None = None, at: tuple[int, int] = (0, 0)) -> bytes:
@@ -51,7 +53,9 @@ def qr_png(payload: str, px: int, canvas: tuple[int, int] | None = None, at: tup
     [
         (LABEL, LABEL),
         (f"https://homebox.example.com/a/{LABEL}", LABEL),
-        ("https://homebox.example.com/a/000-042", "000-042"),
+        (f"https://homebox.example.com/a/{HOMEBOX_SPELLING}", LABEL),
+        (HOMEBOX_SPELLING, LABEL),
+        ("https://homebox.example.com/a/000-042", "000042"),
         (f"  {LABEL}\n", LABEL),
         ("Buy now at example.com", "Buy now at example.com"),
     ],
@@ -67,7 +71,8 @@ def test_parse_asset_id(payload: str, expected: str) -> None:
         ("0026843450000", False),  # leading zero: not one of ours
         ("9002684345000", False),  # 13 digits
         ("900268434500000", False),  # 15 digits
-        ("000-042", False),  # legacy Homebox id
+        ("000042", False),  # a native Homebox id
+        ("9" + "０" * 13, False),  # fullwidth digits: \d would take these, [0-9] does not
         ("https://acme.example/promo", False),
         ("012345678905", False),  # a UPC
         ("", False),
@@ -110,6 +115,12 @@ def test_finds_a_small_label_in_a_full_size_frame() -> None:
 
 def test_accepts_a_homebox_asset_url_payload() -> None:
     photo = qr_png(f"https://homebox.example.com/a/{LABEL}", 300)
+    assert find_asset_id_labels([photo], PATTERN) == [LABEL]
+
+
+def test_accepts_the_url_homebox_itself_prints() -> None:
+    """Homebox's label generator writes the id with a hyphen; that is the same id."""
+    photo = qr_png(f"https://homebox.example.com/a/{HOMEBOX_SPELLING}", 300)
     assert find_asset_id_labels([photo], PATTERN) == [LABEL]
 
 

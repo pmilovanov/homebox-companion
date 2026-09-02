@@ -709,7 +709,7 @@
 									<div class="mb-2 flex items-center gap-0.5">
 										<span class="text-body-sm font-medium text-neutral-200">Asset ID</span>
 										<InfoTooltip
-											text="Enter an asset ID manually or scan a pre-printed QR code. Leave blank for auto-assignment."
+											text="Optional. Type an asset ID or scan a pre-printed QR code. A label visible in the photo is read on its own."
 										/>
 									</div>
 									<AssetIdInput

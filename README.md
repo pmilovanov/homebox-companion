@@ -378,14 +378,14 @@ Print QR labels ahead of time, stick one on each item, and photograph the item a
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HBC_ASSET_ID_LABEL_PATTERN` | `^9\d{13}$` | Regex a QR payload must match, in full, to be accepted as an asset ID. Empty disables detection. |
+| `HBC_ASSET_ID_LABEL_PATTERN` | `^9[0-9]{13}$` | Regex a QR payload must match, in full, to be accepted as an asset ID. Empty disables detection. |
 | `HBC_ASSET_ID_AUTO_ASSIGN` | `false` | After each batch create, ask Homebox to assign asset IDs to every item in the group that lacks one |
 
-The pattern is strict on purpose: product packaging is full of QR codes, and a loose pattern would file a marketing URL as an item's asset ID. Both a bare ID and a Homebox `/a/{id}` URL are accepted; the pattern is applied after the ID is extracted.
+The pattern is strict on purpose: product packaging is full of QR codes, and a loose pattern would file a marketing URL as an item's asset ID. Both a bare ID and a Homebox `/a/{id}` URL are accepted. Hyphens are removed before matching, because Homebox ignores them: `900-26843450000` and `90026843450000` are the same ID.
 
-**Homebox server prerequisite:** Set `HBOX_OPTIONS_AUTO_INCREMENT_ASSET_ID=false` on your Homebox instance. By default Homebox assigns every new item the next asset ID above the highest one in the group. Once a printed label is in use, "the next one" is the next label still sitting on your sheet, and an item created without a label will be handed it. `HBC_ASSET_ID_AUTO_ASSIGN` does not change this; it only controls a separate, group-wide sweep after batch creation.
+**Keep Homebox's own numbering above your labels.** Homebox hands out asset IDs itself, always the next number above the highest one in the group: to every item it creates (while its `HBOX_OPTIONS_AUTO_INCREMENT_ASSET_ID` option is on, the default), to every item and location still without one at every startup (regardless of that option), and on Duplicate. It only ever counts upward, so a printed label is safe exactly when the highest asset ID already in Homebox is above it. Before the first label goes on an item, give one item an asset ID above the whole range you will ever print, and name it so nobody deletes it by accident. Everything Homebox numbers on its own then lands above that, never on a sticker still in the drawer. `HBC_ASSET_ID_AUTO_ASSIGN` changes none of this; it only adds one more sweep after each batch.
 
-Homebox does not reject duplicate asset IDs. When an ID you are about to assign is already on another item, the asset ID field warns you.
+Homebox does not reject duplicate asset IDs. When an ID you are about to assign is already on another item, the asset ID field warns you, and Confirm All warns about clashes among the items it is about to write.
 
 </details>
 
