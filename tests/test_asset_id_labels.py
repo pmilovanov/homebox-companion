@@ -20,11 +20,11 @@ from homebox_companion.tools.vision.labels import (
     parse_asset_id,
 )
 
-PATTERN = r"^9[0-9]{13}$"
-LABEL = "90026843450000"
-OTHER_LABEL = "90026843450001"
+PATTERN = r"^100[0-9]{13}$"
+LABEL = "1000268434500000"
+OTHER_LABEL = "1000268434500001"
 # How Homebox itself spells LABEL: split after three digits, in its UI and its /a/ URLs.
-HOMEBOX_SPELLING = "900-26843450000"
+HOMEBOX_SPELLING = "100-0268434500000"
 
 
 def qr_png(payload: str, px: int, canvas: tuple[int, int] | None = None, at: tuple[int, int] = (0, 0)) -> bytes:
@@ -68,11 +68,12 @@ def test_parse_asset_id(payload: str, expected: str) -> None:
     "candidate,accepted",
     [
         (LABEL, True),
-        ("0026843450000", False),  # leading zero: not one of ours
-        ("9002684345000", False),  # 13 digits
-        ("900268434500000", False),  # 15 digits
+        ("90026843450000", False),  # the earlier 14-digit scheme
+        ("100026843450000", False),  # 15 digits
+        ("10002684345000000", False),  # 17 digits
+        ("9000000000000000", False),  # the sentinel item itself
         ("000042", False),  # a native Homebox id
-        ("9" + "０" * 13, False),  # fullwidth digits: \d would take these, [0-9] does not
+        ("100" + "０" * 13, False),  # fullwidth digits: \d would take these, [0-9] does not
         ("https://acme.example/promo", False),
         ("012345678905", False),  # a UPC
         ("", False),
@@ -85,9 +86,9 @@ def test_is_label_asset_id(candidate: str, accepted: bool) -> None:
 def test_pattern_is_matched_in_full() -> None:
     """An unanchored pattern must not accept a longer payload that merely
     contains an id; the pattern decides what an id *is*, not what it contains."""
-    assert is_label_asset_id(LABEL, r"9\d{13}")
-    assert not is_label_asset_id(LABEL + "7", r"9\d{13}")
-    assert not is_label_asset_id("x" + LABEL, r"9\d{13}")
+    assert is_label_asset_id(LABEL, r"100[0-9]{13}")
+    assert not is_label_asset_id(LABEL + "7", r"100[0-9]{13}")
+    assert not is_label_asset_id("x" + LABEL, r"100[0-9]{13}")
 
 
 def test_empty_pattern_disables_acceptance() -> None:
@@ -95,7 +96,7 @@ def test_empty_pattern_disables_acceptance() -> None:
 
 
 def test_malformed_pattern_rejects_rather_than_raising() -> None:
-    assert not is_label_asset_id(LABEL, r"^9(\d{13}$")
+    assert not is_label_asset_id(LABEL, r"^100([0-9]{13}$")
 
 
 # ---- decoding --------------------------------------------------------------

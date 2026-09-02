@@ -1093,6 +1093,42 @@ class HomeboxClient:
             raise ValueError(f"No item found with asset ID: {asset_id}")
         return items[0]
 
+    async def highest_asset_id(self, token: str) -> int:
+        """The largest asset ID on any entity in the group, or 0 if none has one.
+
+        Homebox sorts the entity list by asset ID ascending only, and lists
+        items and locations separately, so this reads the last page of each.
+        Locations count: Homebox's own numbering covers them too, and so do
+        archived entities.
+        """
+        highest = 0
+        for is_location in ("false", "true"):
+            params: dict[str, Any] = {
+                "orderBy": "assetId",
+                "pageSize": 1,
+                "page": 1,
+                "isLocation": is_location,
+                "includeArchived": "true",
+            }
+            page = await self._entities_page(token, params)
+            total = page.get("total", 0)
+            if total > 1:
+                page = await self._entities_page(token, {**params, "page": total})
+            for entry in page.get("items", []):
+                digits = str(entry.get("assetId") or "").replace("-", "")
+                if digits.isdigit():
+                    highest = max(highest, int(digits))
+        return highest
+
+    async def _entities_page(self, token: str, params: dict[str, Any]) -> dict[str, Any]:
+        response = await self.client.get(
+            f"{self.base_url}/entities",
+            headers=self._auth_headers(token),
+            params=params,
+        )
+        self._ensure_success(response, "List entities")
+        return response.json()
+
     async def get_item_typed(self, token: str, item_id: str) -> Item:
         """Get full item details by ID as typed Item object.
 

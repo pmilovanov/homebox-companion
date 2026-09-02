@@ -82,17 +82,26 @@ class FakeHomebox:
     def __init__(self, items: dict[str, dict[str, Any]]) -> None:
         self.items = items
         self.updates: list[tuple[str, dict[str, Any]]] = []
+        self.created_names: list[str] = []
+        self.deleted: list[str] = []
         self.asset_lookups: list[str] = []
         self.by_asset: dict[str, dict[str, Any]] = {}
+        # Stands in for entities this fake does not hold (a location, say).
+        self.highest_floor = 0
+        self.fail_updates = False
 
     async def get_item(self, token: str, item_id: str) -> dict[str, Any]:
         return dict(self.items[item_id])
 
     async def update_item(self, token: str, item_id: str, item_data: dict[str, Any]) -> dict[str, Any]:
+        if self.fail_updates:
+            raise RuntimeError("Homebox said no")
         self.updates.append((item_id, item_data))
-        return {**self.items[item_id], **item_data, "id": item_id}
+        self.items[item_id] = {**self.items[item_id], **item_data, "id": item_id}
+        return dict(self.items[item_id])
 
     async def create_item(self, token: str, item: Any) -> dict[str, Any]:
+        self.created_names.append(item.name)
         created = {**CREATED_ITEM, "name": item.name}
         self.items[created["id"]] = created
         return created
@@ -104,7 +113,16 @@ class FakeHomebox:
         return self.by_asset[asset_id]
 
     async def delete_item(self, token: str, item_id: str) -> None:
+        self.deleted.append(item_id)
         self.items.pop(item_id, None)
+
+    async def highest_asset_id(self, token: str) -> int:
+        highest = self.highest_floor
+        for item in self.items.values():
+            digits = str(item.get("assetId") or "").replace("-", "")
+            if digits.isdigit():
+                highest = max(highest, int(digits))
+        return highest
 
 
 @pytest.fixture
@@ -114,7 +132,7 @@ def api() -> tuple[TestClient, FakeHomebox]:
     app.include_router(items_module.router)
     app.dependency_overrides[get_client] = lambda: fake
     app.dependency_overrides[get_token] = lambda: "token"
-    return TestClient(app), fake
+    return TestClient(app, raise_server_exceptions=False), fake
 
 
 # ---- the PUT body ----------------------------------------------------------
@@ -253,3 +271,103 @@ class TestAssetIdLookup:
         response = client.get("/items/by-asset-id/90026843450001")
         assert response.json() == {"found": False}
         assert fake.asset_lookups == ["90026843450001"]
+
+
+# ---- the sentinel that keeps Homebox's own numbering above the labels --------
+
+SENTINEL = "9000000000000000"
+
+
+class TestAssetIdSentinel:
+    def test_reports_missing_while_the_highest_id_is_below_it(self, api: tuple[TestClient, FakeHomebox]) -> None:
+        client, _ = api  # the canned item carries 000-042
+        response = client.get("/items/asset-id-sentinel")
+        assert response.json() == {"enabled": True, "sentinel": SENTINEL, "highest": "42", "ok": False}
+
+    def test_creating_it_archives_an_item_carrying_the_sentinel_id(self, api: tuple[TestClient, FakeHomebox]) -> None:
+        client, fake = api
+        response = client.post("/items/asset-id-sentinel")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["created"] is True
+        assert body["ok"] is True
+        assert body["highest"] == SENTINEL
+        assert fake.created_names == [items_module.SENTINEL_NAME]
+        [(item_id, put)] = fake.updates
+        assert item_id == body["id"]
+        assert put["assetId"] == SENTINEL
+        assert put["archived"] is True
+        assert put["name"] == items_module.SENTINEL_NAME
+
+    def test_does_nothing_once_it_is_in_place(self, api: tuple[TestClient, FakeHomebox]) -> None:
+        client, fake = api
+        fake.highest_floor = int(SENTINEL)
+        assert client.get("/items/asset-id-sentinel").json()["ok"] is True
+        assert client.post("/items/asset-id-sentinel").json()["created"] is False
+        assert fake.created_names == []
+        assert fake.updates == []
+
+    def test_is_off_when_labels_are_off(
+        self, api: tuple[TestClient, FakeHomebox], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(items_module.settings, "asset_id_label_pattern", "")
+        client, _ = api
+        assert client.get("/items/asset-id-sentinel").json() == {
+            "enabled": False,
+            "sentinel": SENTINEL,
+            "highest": None,
+            "ok": True,
+        }
+        assert client.post("/items/asset-id-sentinel").status_code == 400
+
+    def test_a_failed_assignment_removes_the_half_made_item(self, api: tuple[TestClient, FakeHomebox]) -> None:
+        """An unnumbered item that says "do not delete" is worse than no sentinel."""
+        client, fake = api
+        fake.fail_updates = True
+        response = client.post("/items/asset-id-sentinel")
+        assert response.status_code == 500
+        assert fake.created_names == [items_module.SENTINEL_NAME]
+        assert fake.deleted == [CREATED_ITEM["id"]]
+
+
+class TestHighestAssetIdQuery:
+    """The client reads the last page of Homebox's ascending asset-ID sort, items and locations both."""
+
+    def test_reads_the_last_page_of_both_lists(self) -> None:
+        import asyncio
+
+        import httpx
+
+        from homebox_companion import HomeboxClient
+
+        seen: list[tuple[str, str]] = []
+        entries = {("false", "1"): "", ("false", "3"): "000-042", ("true", "1"): "000-007"}
+        totals = {"false": 3, "true": 1}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            params = dict(request.url.params)
+            assert request.url.path.endswith("/entities")
+            assert params["orderBy"] == "assetId"
+            assert params["pageSize"] == "1"
+            assert params["includeArchived"] == "true"
+            key = (params["isLocation"], params["page"])
+            seen.append(key)
+            return httpx.Response(
+                200,
+                json={
+                    "items": [{"id": "x", "assetId": entries[key]}],
+                    "page": int(params["page"]),
+                    "pageSize": 1,
+                    "total": totals[params["isLocation"]],
+                },
+            )
+
+        async def run() -> int:
+            transport = httpx.MockTransport(handler)
+            async with HomeboxClient(
+                base_url="http://homebox.test/api/v1", client=httpx.AsyncClient(transport=transport)
+            ) as client:
+                return await client.highest_asset_id("token")
+
+        assert asyncio.run(run()) == 42
+        assert seen == [("false", "1"), ("false", "3"), ("true", "1")]

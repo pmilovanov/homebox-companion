@@ -95,6 +95,84 @@ async def get_item_by_asset_id(
     }
 
 
+SENTINEL_NAME = "Asset ID sentinel"
+SENTINEL_DESCRIPTION = (
+    "Keeps Homebox's own asset ID numbering above the pre-printed labels: every item Homebox "
+    "numbers itself gets the next number after this one. Do not delete it. Without it, Homebox "
+    "can hand a label's number to an item that has no label."
+)
+
+
+async def _sentinel_status(token: str, client: HomeboxClient) -> dict[str, Any]:
+    """Whether Homebox's own numbering already sits above every printed label.
+
+    Homebox hands out max(existing) + 1 at creation and to every unnumbered
+    entity at every startup, and only ever counts upward. So the labels are
+    safe exactly when the highest asset ID in the group is at or above the
+    sentinel value, which itself sits above the whole label range.
+    """
+    sentinel = settings.asset_id_sentinel
+    enabled = bool(settings.asset_id_label_pattern) and sentinel > 0
+    if not enabled:
+        return {"enabled": False, "sentinel": str(sentinel), "highest": None, "ok": True}
+    highest = await client.highest_asset_id(token)
+    return {
+        "enabled": True,
+        "sentinel": str(sentinel),
+        "highest": str(highest) if highest > 0 else None,
+        "ok": highest >= sentinel,
+    }
+
+
+@router.get("/items/asset-id-sentinel")
+async def get_asset_id_sentinel(
+    token: Annotated[str, Depends(get_token)],
+    client: Annotated[HomeboxClient, Depends(get_client)],
+) -> dict[str, Any]:
+    """Report whether the sentinel that protects pre-printed labels is in place."""
+    return await _sentinel_status(token, client)
+
+
+@router.post("/items/asset-id-sentinel")
+async def create_asset_id_sentinel(
+    token: Annotated[str, Depends(get_token)],
+    client: Annotated[HomeboxClient, Depends(get_client)],
+) -> dict[str, Any]:
+    """Create the sentinel item, an archived item carrying the sentinel asset ID.
+
+    Idempotent: if the highest asset ID is already at or above the sentinel,
+    nothing is created. Archived so it stays out of everyday lists; Homebox
+    counts archived entities when it looks for its highest asset ID.
+    """
+    status = await _sentinel_status(token, client)
+    if not status["enabled"]:
+        raise HTTPException(status_code=400, detail="Pre-printed labels are disabled on this server")
+    if status["ok"]:
+        return {**status, "created": False}
+
+    created = await client.create_item(
+        token, ItemCreate(name=SENTINEL_NAME, quantity=1, description=SENTINEL_DESCRIPTION)
+    )
+    item_id = created["id"]
+    try:
+        # Asset IDs cannot be set at creation; PUT the whole item back with it.
+        full_item = await client.get_item(token, item_id)
+        update_data = {**update_payload(full_item), "assetId": str(settings.asset_id_sentinel), "archived": True}
+        await client.update_item(token, item_id, update_data)
+    except HomeboxAuthError:
+        raise
+    except Exception:
+        # Half a sentinel is worse than none: an unnumbered item that says "do not delete".
+        logger.exception(f"Could not assign the sentinel asset ID; removing item {item_id}")
+        try:
+            await client.delete_item(token, item_id)
+        except Exception as delete_err:
+            logger.error(f"Failed to clean up sentinel item {item_id}: {delete_err}")
+        raise
+    logger.info(f"Created asset ID sentinel item {item_id}")
+    return {**(await _sentinel_status(token, client)), "created": True, "id": item_id}
+
+
 @router.post("/items")
 async def create_items(
     request: BatchCreateRequest,

@@ -149,10 +149,22 @@ class Settings(BaseSettings):
     # this pattern in full, after hyphens are removed (Homebox ignores them).
     # Kept strict on purpose: product packaging is full of QR codes, and a loose
     # pattern would file a marketing URL as an item's asset ID. The default
-    # matches the 14-digit ids produced by the label generator (a leading 9,
-    # 9 digits of timestamp, 4 of batch counter); [0-9] rather than \d so that
-    # only ASCII digits count. Empty disables detection.
-    asset_id_label_pattern: str = r"^9[0-9]{13}$"
+    # matches the 16-digit ids produced by the label generator (a fixed 100,
+    # 9 digits of timestamp, 4 of batch counter: 10^15 plus the stamp); [0-9]
+    # rather than \d so that only ASCII digits count. Empty disables detection.
+    asset_id_label_pattern: str = r"^100[0-9]{13}$"
+
+    # The asset ID of the sentinel item that keeps Homebox's own numbering above
+    # every printed label.
+    #
+    # Homebox assigns max(existing) + 1 itself, at creation and to every
+    # unnumbered entity at every startup, and only ever counts upward. One item
+    # carrying this asset ID therefore makes everything Homebox numbers on its
+    # own land above it, never on a label still in the drawer. 9*10^15 sits above
+    # the whole label range and under JavaScript's safe-integer bound. Settings
+    # offers to create the item; the capture screen warns while it is missing.
+    # 0 disables both the check and the action.
+    asset_id_sentinel: int = 9_000_000_000_000_000
 
     # Whether to call Homebox's ensure-asset-ids action after each batch create.
     #
