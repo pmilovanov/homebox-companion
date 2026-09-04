@@ -372,6 +372,24 @@ When enabled, a print button appears on the post-creation screen for each item. 
 </details>
 
 <details>
+<summary>🏷️ Pre-printed Asset ID Labels</summary>
+
+Print QR labels ahead of time, stick one on each item, and photograph the item as usual. If a label is visible in the photo, its ID is read and pre-filled as the item's asset ID on the review screen, marked as read from the label. You can still type or scan one by hand. Off until you set a pattern.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HBC_ASSET_ID_LABEL_PATTERN` | *(empty)* | Regex a QR payload must match, in full, to be accepted as an asset ID. Empty turns label detection off. |
+| `HBC_ASSET_ID_AUTO_ASSIGN` | `false` | After each batch create, ask Homebox to assign asset IDs to every item in the group that lacks one |
+
+Keep the pattern strict: product packaging is full of QR codes, and a loose pattern would file a marketing URL as an item's asset ID. For example, `^100[0-9]{13}$` accepts the 16-digit ids a label generator prints as `100`, nine digits of print time and four of batch index, which Homebox shows as `100-0026839510004`. Both a bare ID and a Homebox `/a/{id}` URL are accepted. Hyphens are removed before matching, because Homebox ignores them.
+
+**Mind Homebox's own numbering.** Homebox hands out asset IDs itself, always the next number above the highest one in the group: to every item it creates (while its `HBOX_OPTIONS_AUTO_INCREMENT_ASSET_ID` option is on, the default), to every item and location still without one at every startup (regardless of that option), and on Duplicate. A printed label is safe from that only while the highest asset ID already in Homebox is above it; since the counter only ever moves up, one entity carrying a very high asset ID keeps it that way. `HBC_ASSET_ID_AUTO_ASSIGN` adds one more such sweep after each batch.
+
+Homebox does not reject duplicate asset IDs. When an ID you are about to assign is already on another item, the asset ID field warns you, and Confirm All warns about clashes among the items it is about to write.
+
+</details>
+
+<details>
 <summary>AI Output Customization</summary>
 
 Customize how AI formats detected item fields. Set via environment variables or the Settings page (UI takes priority).

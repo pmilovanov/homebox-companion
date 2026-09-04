@@ -15,6 +15,9 @@ from ..schemas.items import BatchCreateRequest
 
 router = APIRouter()
 
+# Homebox stores asset IDs as int64.
+_INT64_MAX = 2**63 - 1
+
 
 @router.get("/items")
 async def list_items(
@@ -45,6 +48,51 @@ async def list_items(
 
     logger.debug(f"Found {len(result)} items")
     return result
+
+
+@router.get("/items/by-asset-id/{asset_id}")
+async def get_item_by_asset_id(
+    asset_id: str,
+    token: Annotated[str, Depends(get_token)],
+    client: Annotated[HomeboxClient, Depends(get_client)],
+) -> dict[str, Any]:
+    """Look up an item by its asset ID.
+
+    Used to warn when an asset ID about to be assigned is already on another
+    item: Homebox does not reject duplicates, it just leaves two items answering
+    to one printed label. Returns {"found": false} rather than 404 when the ID
+    is free, since "nothing has this ID" is the expected answer, not an error.
+    """
+    logger.debug(f"Looking up item by asset ID: {asset_id}")
+
+    # Homebox reads the ID as an integer, hyphens ignored. Anything it cannot
+    # read it answers with a 500, and 0 (or "000-0") matches every entity that
+    # has no asset ID yet, which is not "taken". Settle both here: an ID no
+    # item can carry is free.
+    digits = asset_id.replace("-", "").strip()
+    if not (digits.isascii() and digits.isdigit()) or len(digits) > 19 or not 0 < int(digits) <= _INT64_MAX:
+        return {"found": False}
+
+    try:
+        item = await client.get_item_by_asset_id(token, digits)
+    except HomeboxAuthError:
+        # Let the global handler turn this into a 401 so the frontend can
+        # refresh the token and retry, as it does for every other route.
+        raise
+    except ValueError:
+        # No item carries this asset ID: it is free to use.
+        return {"found": False}
+    except Exception as e:
+        # A lookup that cannot be completed is "cannot confirm", which the
+        # caller treats as no news.
+        logger.warning(f"Asset ID lookup failed for {asset_id}: {e}")
+        raise HTTPException(status_code=502, detail="Could not check asset ID") from None
+
+    return {
+        "found": True,
+        "id": item.get("id"),
+        "name": item.get("name"),
+    }
 
 
 @router.post("/items")
@@ -181,8 +229,14 @@ async def create_items(
 
     logger.info(f"Item creation complete: {len(created)} created, {len(errors)} failed")
 
-    # After all items created, ensure asset IDs are assigned
-    if created:
+    # Optionally ask Homebox to assign asset IDs to items that lack one.
+    #
+    # Off by default: ensure-asset-ids is a group-wide sweep that assigns
+    # max(existing) + 1 to every zero-ID item in the group, including items this
+    # app never touched. Homebox already numbers new items itself at creation
+    # (while its auto-increment option is on) and sweeps at every startup, so
+    # this is rarely needed; see config.py.
+    if created and settings.asset_id_auto_assign:
         try:
             assigned = await client.ensure_asset_ids(token)
             if assigned > 0:

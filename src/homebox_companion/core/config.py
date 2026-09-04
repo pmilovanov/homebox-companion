@@ -31,6 +31,12 @@ Environment Variables:
     HBC_CHAT_APPROVAL_TIMEOUT: Seconds before pending approvals expire (default: 300)
     HBC_PRINT_ENABLED: Enable the print label button in the UI (default: false).
         Requires HBOX_LABEL_MAKER_PRINT_COMMAND to be configured on the Homebox server.
+    HBC_ASSET_ID_LABEL_PATTERN: Regex a QR payload found in a photo must match, in full,
+        to be accepted as the item's asset ID (default: empty, label detection off).
+        For example ^100[0-9]{13}$ for the 16-digit ids a label generator prints.
+    HBC_ASSET_ID_AUTO_ASSIGN: After each batch create, ask Homebox to assign asset IDs
+        to every item in the group that lacks one (default: false). See the field
+        comment; on its own this does not make pre-printed labels safe.
 
 AI Output Customization env vars (HBC_AI_*) are handled separately in
 field_preferences.py via FieldPreferencesDefaults.
@@ -136,6 +142,31 @@ class Settings(BaseSettings):
     chat_max_history: int = 20  # Max messages in conversation context
     chat_approval_timeout: int = 300  # Seconds before pending approvals expire
     chat_max_response_tokens: int = 0  # 0 = no limit (LLM decides naturally)
+
+    # Pre-printed asset ID labels
+    #
+    # A QR payload found in a photo is accepted as an asset ID only if it matches
+    # this pattern in full, after hyphens are removed (Homebox ignores them).
+    # Empty, the default, turns label detection off: the feature is opt-in and
+    # the pattern is yours to set for the labels you print. Keep it strict:
+    # product packaging is full of QR codes, and a loose pattern would file a
+    # marketing URL as an item's asset ID. For example, ^100[0-9]{13}$ accepts
+    # 16-digit ids made of a fixed 100, 9 digits of timestamp and 4 of batch
+    # counter; [0-9] rather than \d so that only ASCII digits count.
+    asset_id_label_pattern: str = ""
+
+    # Whether to call Homebox's ensure-asset-ids action after each batch create.
+    #
+    # Off by default because the action is a group-wide sweep: it assigns
+    # max(existing) + 1 to *every* item in the group lacking an ID, including
+    # items created outside this app, which is overreach for a post-create hook.
+    #
+    # This flag has no bearing on whether pre-printed labels are safe from
+    # Homebox's own numbering. Homebox assigns max(existing) + 1 itself, at
+    # creation (while its auto-increment option is on) and to every unnumbered
+    # entity at every startup (always). Labels are safe only while the highest
+    # asset ID in the group sits above every label printed; see the README.
+    asset_id_auto_assign: bool = False
 
     # Auth rate limiting (brute-force protection)
     auth_rate_limit_rpm: int = 10  # Login attempts per minute per IP

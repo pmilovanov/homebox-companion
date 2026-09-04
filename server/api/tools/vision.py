@@ -20,6 +20,7 @@ from homebox_companion import (
 from homebox_companion import (
     correct_item as llm_correct_item,
 )
+from homebox_companion.tools.vision.labels import find_asset_id_labels
 from homebox_companion.tools.vision.models import get_custom_fields_dict
 
 from ...dependencies import (
@@ -168,10 +169,30 @@ async def detect_items(
         # Compress all images in parallel
         return await asyncio.gather(*[compress_one(img_bytes, mime) for img_bytes, mime in all_images_to_compress])
 
-    # Detect items
-    logger.info("Starting LLM vision detection and image compression...")
+    async def find_labels() -> list[str]:
+        """Read pre-printed asset ID labels off the original photos.
 
-    # Run detection and compression in parallel
+        Runs on the raw uploaded bytes, not the copy resized for the vision
+        model, because a small label in a wide shot does not survive the resize.
+        CPU-bound and ~70 ms for a 12 MP frame, so it shares the compression
+        semaphore rather than getting its own. Must never fail item detection:
+        a photo with no label is the ordinary case, not an error.
+        """
+        pattern = settings.asset_id_label_pattern
+        if not pattern:
+            return []
+        all_bytes = [image_bytes] + [img_bytes for img_bytes, _ in additional_image_data]
+        try:
+            async with _get_compression_semaphore():
+                return await asyncio.to_thread(find_asset_id_labels, all_bytes, pattern)
+        except Exception as e:
+            logger.warning(f"Asset ID label detection failed; continuing without it: {e}")
+            return []
+
+    # Detect items
+    logger.info("Starting LLM vision detection, image compression and label detection...")
+
+    # Run detection, compression and label detection in parallel
     detection_task = detect_items_from_bytes(
         image_bytes=image_bytes,
         mime_type=content_type,
@@ -186,9 +207,14 @@ async def detect_items(
     )
     compression_task = compress_all_images()
 
-    detected, compressed_images = await asyncio.gather(detection_task, compression_task)
+    detected, compressed_images, detected_asset_ids = await asyncio.gather(
+        detection_task, compression_task, find_labels()
+    )
 
-    logger.info(f"Detected {len(detected)} items, compressed {len(compressed_images)} images")
+    logger.info(
+        f"Detected {len(detected)} items, compressed {len(compressed_images)} images, "
+        f"found {len(detected_asset_ids)} asset ID label(s)"
+    )
 
     # Build response items first
     response_items = [
@@ -241,6 +267,7 @@ async def detect_items(
     return DetectionResponse(
         items=response_items,
         compressed_images=compressed_images,
+        detected_asset_ids=detected_asset_ids,
     )
 
 

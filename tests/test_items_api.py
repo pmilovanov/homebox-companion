@@ -84,6 +84,8 @@ class FakeHomebox:
         self.updates: list[tuple[str, dict[str, Any]]] = []
         self.created_names: list[str] = []
         self.deleted: list[str] = []
+        self.asset_lookups: list[str] = []
+        self.by_asset: dict[str, dict[str, Any]] = {}
 
     async def get_item(self, token: str, item_id: str) -> dict[str, Any]:
         return dict(self.items[item_id])
@@ -98,6 +100,12 @@ class FakeHomebox:
         created = {**CREATED_ITEM, "name": item.name}
         self.items[created["id"]] = created
         return created
+
+    async def get_item_by_asset_id(self, token: str, asset_id: str) -> dict[str, Any]:
+        self.asset_lookups.append(asset_id)
+        if asset_id not in self.by_asset:
+            raise ValueError(f"No item found with asset ID: {asset_id}")
+        return self.by_asset[asset_id]
 
     async def delete_item(self, token: str, item_id: str) -> None:
         self.deleted.append(item_id)
@@ -213,3 +221,43 @@ class TestCreateItems:
         assert body["name"] == "Lamp"
         assert body["manufacturer"] == "Ikea"
         assert [(field["name"], field["textValue"]) for field in body["fields"]] == [("Color", "red")]
+
+
+# ---- GET /items/by-asset-id/{id} -------------------------------------------
+
+
+class TestAssetIdLookup:
+    @pytest.mark.parametrize(
+        "asset_id",
+        [
+            "abc",  # Homebox answers 500 to this
+            "0",  # matches every entity without an asset ID
+            "000-0",
+            "9００",  # fullwidth digits
+            "99999999999999999999",  # past int64
+            "9" * 5000,  # past Python's int-parsing limit, never mind int64
+        ],
+    )
+    def test_an_id_no_item_can_carry_is_free_without_asking(
+        self, api: tuple[TestClient, FakeHomebox], asset_id: str
+    ) -> None:
+        client, fake = api
+        response = client.get(f"/items/by-asset-id/{asset_id}")
+        assert response.status_code == 200
+        assert response.json() == {"found": False}
+        assert fake.asset_lookups == []
+
+    def test_hyphens_are_dropped_before_asking(self, api: tuple[TestClient, FakeHomebox]) -> None:
+        """As Homebox does: "900-26843450000" and "-5" read as 90026843450000 and 5."""
+        client, fake = api
+        fake.by_asset["90026843450000"] = {"id": "item-9", "name": "Bench vise"}
+        response = client.get("/items/by-asset-id/900-26843450000")
+        assert response.json() == {"found": True, "id": "item-9", "name": "Bench vise"}
+        client.get("/items/by-asset-id/-5")
+        assert fake.asset_lookups == ["90026843450000", "5"]
+
+    def test_a_free_id(self, api: tuple[TestClient, FakeHomebox]) -> None:
+        client, fake = api
+        response = client.get("/items/by-asset-id/90026843450001")
+        assert response.json() == {"found": False}
+        assert fake.asset_lookups == ["90026843450001"]

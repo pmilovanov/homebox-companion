@@ -40,6 +40,7 @@
 	// Capture limits (loaded from config, with safe defaults)
 	let maxImages = $state(30);
 	let maxFileSizeMb = $state(10);
+	let labelsEnabled = $state(false);
 
 	let fileInput: HTMLInputElement;
 	let cameraInput: HTMLInputElement;
@@ -148,6 +149,7 @@
 			const config = await getConfig();
 			maxImages = config.capture_max_images;
 			maxFileSizeMb = config.capture_max_file_size_mb;
+			labelsEnabled = config.asset_id_labels_enabled;
 		} catch (error) {
 			log.warn('Failed to load capture config, using defaults', error);
 		}
@@ -709,7 +711,9 @@
 									<div class="mb-2 flex items-center gap-0.5">
 										<span class="text-body-sm font-medium text-neutral-200">Asset ID</span>
 										<InfoTooltip
-											text="Enter an asset ID manually or scan a pre-printed QR code. Leave blank for auto-assignment."
+											text={labelsEnabled
+												? 'Optional. Type an asset ID or scan a pre-printed QR code. A label visible in the photo is read on its own.'
+												: 'Optional. Type an asset ID or scan a pre-printed QR code.'}
 										/>
 									</div>
 									<AssetIdInput

@@ -951,8 +951,12 @@ class EnsureAssetIdsTool:
 
     name: str = "ensure_asset_ids"
     description: str = (
-        "Ensure all items have asset IDs assigned. Assigns sequential asset IDs "
-        "to all items that don't currently have one. Idempotent - existing IDs are not affected."
+        "Assign asset IDs to every item and location in the group that has none, "
+        "numbering upward from the current highest. This is a group-wide sweep, not "
+        "limited to items discussed in this conversation, and each number it hands "
+        "out can coincide with a pre-printed label not yet in use unless the highest "
+        "asset ID already sits above the label range. Existing IDs are not touched. "
+        "Only call it when the user explicitly asks for it."
     )
     permission: ToolPermission = ToolPermission.WRITE
 
