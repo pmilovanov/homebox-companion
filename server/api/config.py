@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from homebox_companion import settings
-from homebox_companion.tools.vision.labels import label_detection_enabled
+from homebox_companion.tools.vision.labels import LabelPolicy
 
 router = APIRouter()
 
@@ -46,5 +46,5 @@ async def get_config() -> ConfigResponse:
         capture_max_images=settings.capture_max_images,
         capture_max_file_size_mb=settings.capture_max_file_size_mb,
         print_enabled=settings.print_enabled,
-        asset_id_labels_enabled=label_detection_enabled(settings.asset_id_label_pattern),
+        asset_id_labels_enabled=LabelPolicy.from_settings(settings).enabled,
     )

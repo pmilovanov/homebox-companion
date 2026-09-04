@@ -374,14 +374,17 @@ When enabled, a print button appears on the post-creation screen for each item. 
 <details>
 <summary>🏷️ Pre-printed Asset ID Labels</summary>
 
-Print QR labels ahead of time, stick one on each item, and photograph the item as usual. If a label is visible in the photo, its ID is read and pre-filled as the item's asset ID on the review screen, marked as read from the label. You can still type or scan one by hand. Off until you set a pattern.
+Print QR labels ahead of time, stick one on each item, and photograph the item as usual. If a label is visible in the photo, its ID is read and pre-filled as the item's asset ID on the review screen, marked as read from the label. You can still type or scan one by hand. Off until you turn on one of the two kinds below.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HBC_ASSET_ID_LABEL_PATTERN` | *(empty)* | Regex a QR payload must match, in full, to be accepted as an asset ID. Empty turns label detection off. |
+| `HBC_ASSET_ID_HOMEBOX_LABELS` | `false` | Read the labels Homebox prints itself: a QR code holding `{homebox}/a/{asset id}`. Any host; no pattern applies. |
+| `HBC_ASSET_ID_LABEL_PATTERN` | *(empty)* | Regex a bare QR payload must match, in full, to be accepted as an asset ID, for labels you print yourself. Empty accepts none. |
 | `HBC_ASSET_ID_AUTO_ASSIGN` | `false` | After each batch create, ask Homebox to assign asset IDs to every item in the group that lacks one |
 
-Keep the pattern strict: product packaging is full of QR codes, and a loose pattern would file a marketing URL as an item's asset ID. For example, `^100[0-9]{13}$` accepts the 16-digit ids a label generator prints as `100`, nine digits of print time and four of batch index, which Homebox shows as `100-0026839510004`. Both a bare ID and a Homebox `/a/{id}` URL are accepted. Hyphens are removed before matching, because Homebox ignores them.
+**Homebox's own labels.** Homebox's label maker and its label sheet generator put `https://your-homebox/a/000-013` in the QR code. With `HBC_ASSET_ID_HOMEBOX_LABELS=true` such a URL is read as the asset ID on its shape alone, from any host, since an instance is often reached by more than one name. Print a sheet from Homebox, stick the labels on, photograph. The "Page URL" QR Homebox shows for an item (`/item/{uuid}`) is a link, not a label, and is ignored.
+
+**Your own labels.** Keep the pattern strict: product packaging is full of QR codes, and a loose pattern would file a marketing URL as an item's asset ID. For example, `^100[0-9]{13}$` accepts the 16-digit ids a label generator prints as `100`, nine digits of print time and four of batch index, which Homebox shows as `100-0026839510004`. Both a bare ID and a Homebox `/a/{id}` URL are accepted. Hyphens are removed before matching, because Homebox ignores them.
 
 **Mind Homebox's own numbering.** Homebox hands out asset IDs itself, always the next number above the highest one in the group: to every item it creates (while its `HBOX_OPTIONS_AUTO_INCREMENT_ASSET_ID` option is on, the default), to every item and location still without one at every startup (regardless of that option), and on Duplicate. A printed label is safe from that only while the highest asset ID already in Homebox is above it; since the counter only ever moves up, one entity carrying a very high asset ID keeps it that way. `HBC_ASSET_ID_AUTO_ASSIGN` adds one more such sweep after each batch.
 

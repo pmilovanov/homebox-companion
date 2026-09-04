@@ -34,6 +34,8 @@ Environment Variables:
     HBC_ASSET_ID_LABEL_PATTERN: Regex a QR payload found in a photo must match, in full,
         to be accepted as the item's asset ID (default: empty, label detection off).
         For example ^100[0-9]{13}$ for the 16-digit ids a label generator prints.
+    HBC_ASSET_ID_HOMEBOX_LABELS: Also read the labels Homebox prints itself, the QR code
+        holding {homebox}/a/{asset id} (default: false). No pattern applies to these.
     HBC_ASSET_ID_AUTO_ASSIGN: After each batch create, ask Homebox to assign asset IDs
         to every item in the group that lacks one (default: false). See the field
         comment; on its own this does not make pre-printed labels safe.
@@ -154,6 +156,13 @@ class Settings(BaseSettings):
     # 16-digit ids made of a fixed 100, 9 digits of timestamp and 4 of batch
     # counter; [0-9] rather than \d so that only ASCII digits count.
     asset_id_label_pattern: str = ""
+
+    # Also read the labels Homebox prints itself: its label maker and its label
+    # sheet generator put {homebox}/a/{asset id} in the QR code. The URL shape
+    # is proof enough, so no pattern applies to these, and any host is
+    # accepted, since an instance is often reached by more than one name. Off
+    # by default, like the pattern; either one turns detection on.
+    asset_id_homebox_labels: bool = False
 
     # Whether to call Homebox's ensure-asset-ids action after each batch create.
     #

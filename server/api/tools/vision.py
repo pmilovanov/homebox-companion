@@ -20,7 +20,7 @@ from homebox_companion import (
 from homebox_companion import (
     correct_item as llm_correct_item,
 )
-from homebox_companion.tools.vision.labels import find_asset_id_labels
+from homebox_companion.tools.vision.labels import LabelPolicy, find_asset_id_labels
 from homebox_companion.tools.vision.models import get_custom_fields_dict
 
 from ...dependencies import (
@@ -178,13 +178,13 @@ async def detect_items(
         semaphore rather than getting its own. Must never fail item detection:
         a photo with no label is the ordinary case, not an error.
         """
-        pattern = settings.asset_id_label_pattern
-        if not pattern:
+        policy = LabelPolicy.from_settings(settings)
+        if not policy.enabled:
             return []
         all_bytes = [image_bytes] + [img_bytes for img_bytes, _ in additional_image_data]
         try:
             async with _get_compression_semaphore():
-                return await asyncio.to_thread(find_asset_id_labels, all_bytes, pattern)
+                return await asyncio.to_thread(find_asset_id_labels, all_bytes, policy)
         except Exception as e:
             logger.warning(f"Asset ID label detection failed; continuing without it: {e}")
             return []
