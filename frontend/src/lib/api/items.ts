@@ -23,6 +23,27 @@ export interface AssetIdLookup {
 	name?: string;
 }
 
+/**
+ * Whether the sentinel item that keeps Homebox's own asset-ID numbering above
+ * the pre-printed labels is in place. Numbers are strings: they can exceed
+ * what a JavaScript number holds exactly.
+ */
+export interface AssetIdSentinelStatus {
+	/** False when label detection or the sentinel is turned off on the server. */
+	enabled: boolean;
+	/** The sentinel asset ID, as digits. */
+	sentinel: string;
+	/** Highest asset ID on any item or location in Homebox, or null if none has one. */
+	highest: string | null;
+	/** True when nothing needs doing: disabled, or the highest ID is at or above the sentinel. */
+	ok: boolean;
+}
+
+export interface AssetIdSentinelResult extends AssetIdSentinelStatus {
+	created: boolean;
+	id?: string;
+}
+
 export interface ItemUpdateData {
 	assetId?: string | null;
 	name?: string;
@@ -40,6 +61,14 @@ export const items = {
 	 */
 	byAssetId: (assetId: string, signal?: AbortSignal) =>
 		request<AssetIdLookup>(`/items/by-asset-id/${encodeURIComponent(assetId)}`, { signal }),
+
+	/** Is Homebox's own numbering parked above the pre-printed labels? */
+	sentinelStatus: (signal?: AbortSignal) =>
+		request<AssetIdSentinelStatus>('/items/asset-id-sentinel', { signal }),
+
+	/** Park it: create the archived sentinel item. Does nothing if it is already in place. */
+	createSentinel: () =>
+		request<AssetIdSentinelResult>('/items/asset-id-sentinel', { method: 'POST' }),
 
 	create: (data: BatchCreateRequest, options: CreateOptions = {}) =>
 		request<BatchCreateResponse>('/items', {

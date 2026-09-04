@@ -36,6 +36,9 @@ Environment Variables:
         For example ^100[0-9]{13}$ for the 16-digit ids a label generator prints.
     HBC_ASSET_ID_HOMEBOX_LABELS: Also read the labels Homebox prints itself, the QR code
         holding {homebox}/a/{asset id} (default: false). No pattern applies to these.
+    HBC_ASSET_ID_SENTINEL: Asset ID of the sentinel item that keeps Homebox's own
+        numbering above every printed label (default: 9000000000000000). Settings
+        offers to create the item; 0 disables the check and the action.
     HBC_ASSET_ID_AUTO_ASSIGN: After each batch create, ask Homebox to assign asset IDs
         to every item in the group that lacks one (default: false). See the field
         comment; on its own this does not make pre-printed labels safe.
@@ -163,6 +166,18 @@ class Settings(BaseSettings):
     # accepted, since an instance is often reached by more than one name. Off
     # by default, like the pattern; either one turns detection on.
     asset_id_homebox_labels: bool = False
+
+    # The asset ID of the sentinel item that keeps Homebox's own numbering above
+    # every printed label.
+    #
+    # Homebox assigns max(existing) + 1 itself, at creation and to every
+    # unnumbered entity at every startup, and only ever counts upward. One item
+    # carrying this asset ID therefore makes everything Homebox numbers on its
+    # own land above it, never on a label still in the drawer. 9*10^15 sits above
+    # the whole label range and under JavaScript's safe-integer bound. Settings
+    # offers to create the item; the capture screen warns while it is missing.
+    # 0 disables both the check and the action.
+    asset_id_sentinel: int = 9_000_000_000_000_000
 
     # Whether to call Homebox's ensure-asset-ids action after each batch create.
     #

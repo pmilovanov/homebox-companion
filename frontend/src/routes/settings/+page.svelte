@@ -17,6 +17,7 @@
 	import AccountSection from '$lib/components/settings/AccountSection.svelte';
 	import AboutSection from '$lib/components/settings/AboutSection.svelte';
 	import FieldPrefsSection from '$lib/components/settings/FieldPrefsSection.svelte';
+	import LabelsSection from '$lib/components/settings/LabelsSection.svelte';
 	import LLMProfilesSection from '$lib/components/settings/LLMProfilesSection.svelte';
 	import LogsSection from '$lib/components/settings/LogsSection.svelte';
 
@@ -72,6 +73,7 @@
 	<AboutSection />
 	<LLMProfilesSection />
 	<FieldPrefsSection />
+	<LabelsSection />
 	<LogsSection />
 
 	<!-- Bottom spacing for nav -->

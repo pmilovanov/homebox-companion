@@ -13,6 +13,7 @@
 	import { getInitPromise } from '$lib/services/tokenRefresh';
 	import { createLogger } from '$lib/utils/logger';
 	import { getConfig } from '$lib/api/settings';
+	import { assetIdSentinel } from '$lib/stores/assetIdSentinel.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import AppContainer from '$lib/components/AppContainer.svelte';
 	import StepIndicator from '$lib/components/StepIndicator.svelte';
@@ -153,6 +154,10 @@
 		} catch (error) {
 			log.warn('Failed to load capture config, using defaults', error);
 		}
+
+		// Warn if pre-printed labels are in use but not yet protected from
+		// Homebox's own numbering. Cached, so this costs nothing after the first visit.
+		void assetIdSentinel.load();
 
 		// If workflow is complete (just finished submission), reset for a new scan session
 		if (workflow.state.status === 'complete') {
@@ -440,6 +445,25 @@
 
 	<h2 class="mb-1 text-h2 text-neutral-100">Capture Items</h2>
 	<p class="mb-6 text-body-sm text-neutral-400">Add photos and configure detection options</p>
+
+	<!-- Pre-printed labels unprotected: Homebox's own numbering can reuse a label -->
+	{#if assetIdSentinel.needsAttention}
+		<div class="mb-4 rounded-xl border border-warning-500/30 bg-warning-500/10 p-4" role="alert">
+			<div class="flex items-start gap-3">
+				<TriangleAlert class="mt-0.5 shrink-0 text-warning-400" size={24} strokeWidth={1.5} />
+				<div class="flex-1">
+					<h3 class="mb-1 text-body font-semibold text-warning-100">
+						Pre-printed labels are not protected
+					</h3>
+					<p class="text-body-sm text-warning-200/80">
+						Homebox numbers new items itself and can hand a label's number to an item that has no
+						label. Create the sentinel item in
+						<a href={resolve('/settings')} class="underline">Settings</a> before using labels.
+					</p>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Current location display -->
 	{#if locationPath}
