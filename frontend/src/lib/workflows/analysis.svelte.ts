@@ -179,7 +179,7 @@ export class AnalysisService {
 						image,
 						items: response.items,
 						compressedImages: response.compressed_images || [],
-						detectedAssetIds: response.detected_asset_ids || [],
+						detectedAssetIds: response.detected_asset_ids,
 					};
 				} catch (error) {
 					// Re-throw abort errors to be handled at the top level

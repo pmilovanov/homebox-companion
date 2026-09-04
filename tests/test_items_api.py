@@ -7,6 +7,7 @@ one. The fake client below records it.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -89,11 +90,19 @@ class FakeHomebox:
         # Stands in for entities this fake does not hold (a location, say).
         self.highest_floor = 0
         self.fail_updates = False
+        # Yield to the event loop inside every call, so concurrent requests interleave.
+        self.slow = False
+
+    async def _io(self) -> None:
+        if self.slow:
+            await asyncio.sleep(0)
 
     async def get_item(self, token: str, item_id: str) -> dict[str, Any]:
+        await self._io()
         return dict(self.items[item_id])
 
     async def update_item(self, token: str, item_id: str, item_data: dict[str, Any]) -> dict[str, Any]:
+        await self._io()
         if self.fail_updates:
             raise RuntimeError("Homebox said no")
         self.updates.append((item_id, item_data))
@@ -101,6 +110,7 @@ class FakeHomebox:
         return dict(self.items[item_id])
 
     async def create_item(self, token: str, item: Any) -> dict[str, Any]:
+        await self._io()
         self.created_names.append(item.name)
         created = {**CREATED_ITEM, "name": item.name}
         self.items[created["id"]] = created
@@ -117,6 +127,7 @@ class FakeHomebox:
         self.items.pop(item_id, None)
 
     async def highest_asset_id(self, token: str) -> int:
+        await self._io()
         highest = self.highest_floor
         for item in self.items.values():
             digits = str(item.get("assetId") or "").replace("-", "")
@@ -319,6 +330,27 @@ class TestAssetIdSentinel:
             "ok": True,
         }
         assert client.post("/items/asset-id-sentinel").status_code == 400
+
+    def test_is_off_when_the_pattern_is_unusable(
+        self, api: tuple[TestClient, FakeHomebox], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pattern that does not compile turns detection off, so there is nothing to protect."""
+        monkeypatch.setattr(items_module.settings, "asset_id_label_pattern", "[unclosed")
+        client, _ = api
+        assert client.get("/items/asset-id-sentinel").json()["enabled"] is False
+        assert client.post("/items/asset-id-sentinel").status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_two_requests_in_flight_create_one_sentinel(self) -> None:
+        """Two clicks at once must not leave two sentinels behind."""
+        fake = FakeHomebox({FULL_ITEM["id"]: dict(FULL_ITEM)})
+        fake.slow = True
+        results = await asyncio.gather(
+            items_module.create_asset_id_sentinel("token", fake),  # ty: ignore[invalid-argument-type]
+            items_module.create_asset_id_sentinel("token", fake),  # ty: ignore[invalid-argument-type]
+        )
+        assert sorted(r["created"] for r in results) == [False, True]
+        assert fake.created_names == [items_module.SENTINEL_NAME]
 
     def test_a_failed_assignment_removes_the_half_made_item(self, api: tuple[TestClient, FakeHomebox]) -> None:
         """An unnumbered item that says "do not delete" is worse than no sentinel."""

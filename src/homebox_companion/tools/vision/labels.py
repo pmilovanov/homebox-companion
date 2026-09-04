@@ -38,6 +38,15 @@ def _compile(pattern: str) -> re.Pattern[str] | None:
         return None
 
 
+def label_detection_enabled(pattern: str) -> bool:
+    """Whether label detection is on: a non-empty pattern that compiles.
+
+    The one answer for every caller, so that a pattern which fails to compile
+    turns off the sentinel check and its warnings along with detection itself.
+    """
+    return bool(pattern) and _compile(pattern) is not None
+
+
 def parse_asset_id(payload: str) -> str:
     """Extract an asset ID from a QR payload, as Homebox would read it.
 
@@ -90,7 +99,7 @@ def find_asset_id_labels(images: Iterable[bytes], pattern: str) -> list[str]:
     single item should carry a single label, so several is ambiguous rather
     than a bonus.
     """
-    if not pattern or _compile(pattern) is None:
+    if not label_detection_enabled(pattern):
         return []
 
     found: list[str] = []

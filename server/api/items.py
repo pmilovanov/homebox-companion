@@ -1,5 +1,6 @@
 """Items API routes."""
 
+import asyncio
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -9,6 +10,7 @@ from loguru import logger
 from homebox_companion import DetectedItem, HomeboxAuthError, HomeboxClient, settings
 from homebox_companion.ai.images import compress_image_for_upload
 from homebox_companion.homebox import ItemCreate, update_payload
+from homebox_companion.tools.vision.labels import label_detection_enabled
 
 from ..dependencies import get_client, get_token, get_valid_tag_ids, validate_file_size
 from ..schemas.items import BatchCreateRequest
@@ -112,7 +114,7 @@ async def _sentinel_status(token: str, client: HomeboxClient) -> dict[str, Any]:
     sentinel value, which itself sits above the whole label range.
     """
     sentinel = settings.asset_id_sentinel
-    enabled = bool(settings.asset_id_label_pattern) and sentinel > 0
+    enabled = label_detection_enabled(settings.asset_id_label_pattern) and sentinel > 0
     if not enabled:
         return {"enabled": False, "sentinel": str(sentinel), "highest": None, "ok": True}
     highest = await client.highest_asset_id(token)
@@ -133,6 +135,11 @@ async def get_asset_id_sentinel(
     return await _sentinel_status(token, client)
 
 
+# One creation at a time: two requests in flight would both find the sentinel
+# missing and leave two behind.
+_sentinel_lock = asyncio.Lock()
+
+
 @router.post("/items/asset-id-sentinel")
 async def create_asset_id_sentinel(
     token: Annotated[str, Depends(get_token)],
@@ -144,6 +151,11 @@ async def create_asset_id_sentinel(
     nothing is created. Archived so it stays out of everyday lists; Homebox
     counts archived entities when it looks for its highest asset ID.
     """
+    async with _sentinel_lock:
+        return await _create_sentinel(token, client)
+
+
+async def _create_sentinel(token: str, client: HomeboxClient) -> dict[str, Any]:
     status = await _sentinel_status(token, client)
     if not status["enabled"]:
         raise HTTPException(status_code=400, detail="Pre-printed labels are disabled on this server")

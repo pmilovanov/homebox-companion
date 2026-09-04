@@ -32,8 +32,11 @@ Environment Variables:
     HBC_PRINT_ENABLED: Enable the print label button in the UI (default: false).
         Requires HBOX_LABEL_MAKER_PRINT_COMMAND to be configured on the Homebox server.
     HBC_ASSET_ID_LABEL_PATTERN: Regex a QR payload found in a photo must match, in full,
-        to be accepted as the item's asset ID (default: a 14-digit id starting with 9).
-        Empty disables label detection.
+        to be accepted as the item's asset ID (default: ^100[0-9]{13}$, the 16-digit
+        ids the label generator prints). Empty disables label detection.
+    HBC_ASSET_ID_SENTINEL: Asset ID of the sentinel item that keeps Homebox's own
+        numbering above every printed label (default: 9000000000000000). Settings
+        offers to create the item; 0 disables the check and the action.
     HBC_ASSET_ID_AUTO_ASSIGN: After each batch create, ask Homebox to assign asset IDs
         to every item in the group that lacks one (default: false). See the field
         comment; on its own this does not make pre-printed labels safe.

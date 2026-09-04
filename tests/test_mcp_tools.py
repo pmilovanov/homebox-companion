@@ -10,12 +10,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from homebox_companion.homebox import update_payload
 from homebox_companion.mcp.tools import (
     GetItemTool,
     GetLocationTool,
     ListItemsTool,
     ListLocationsTool,
     ListTagsTool,
+    UpdateItemTool,
     get_tools,
 )
 from homebox_companion.mcp.types import ToolPermission, ToolResult
@@ -410,6 +412,137 @@ class TestGetItem:
 
         with pytest.raises(Exception, match="Item not found"):
             await tool.execute(mock_client, "test-token", params)
+
+
+# =============================================================================
+# update_item Tests
+# =============================================================================
+
+# A GET /entities/{id} response carrying everything a PUT wipes when left out.
+CURRENT_ITEM = {
+    "id": "item1",
+    "assetId": "000-042",
+    "name": "Drill",
+    "description": "Cordless",
+    "quantity": 2,
+    "insured": True,
+    "archived": False,
+    "serialNumber": "SN-1",
+    "modelNumber": "DCD-777",
+    "manufacturer": "DeWalt",
+    "lifetimeWarranty": False,
+    "warrantyExpires": "2027-05-01",
+    "warrantyDetails": "3 years",
+    "purchaseDate": "2024-05-01",
+    "purchaseFrom": "Hardware store",
+    "purchasePrice": 129.5,
+    "soldDate": "",
+    "soldTo": "",
+    "soldPrice": 0,
+    "soldNotes": "",
+    "notes": "Scuffed",
+    "syncChildEntityLocations": False,
+    "fields": [{"id": "field-1", "type": "text", "name": "Color", "textValue": "yellow"}],
+    "parent": {"id": "loc1", "name": "Garage"},
+    "tags": [{"id": "tag1", "name": "Tools"}],
+}
+
+
+class TestUpdateItem:
+    """update_item sends Homebox the whole item back, changed only where asked.
+
+    PUT /entities/{id} is a full replace: every field the body leaves out is
+    wiped, so what matters is the exact body.
+    """
+
+    @pytest.fixture
+    def client(self, mock_client: MagicMock) -> MagicMock:
+        mock_client.get_item.return_value = dict(CURRENT_ITEM)
+        mock_client.update_item = AsyncMock(side_effect=lambda token, item_id, data: {**data, "id": item_id})
+        return mock_client
+
+    @staticmethod
+    def sent(client: MagicMock) -> dict:
+        client.update_item.assert_called_once()
+        return client.update_item.call_args.args[2]
+
+    @pytest.mark.asyncio
+    async def test_renaming_keeps_everything_else(self, client: MagicMock):
+        tool = UpdateItemTool()
+        result = await tool.execute(client, "test-token", tool.Params(item_id="item1", name="Hammer drill"))
+
+        assert result.success is True
+        assert self.sent(client) == {**update_payload(CURRENT_ITEM), "name": "Hammer drill"}
+        body = self.sent(client)
+        assert body["assetId"] == "000-042"
+        assert body["fields"] == CURRENT_ITEM["fields"]
+        assert body["warrantyExpires"] == "2027-05-01"
+        assert body["purchasePrice"] == 129.5
+        assert body["parentId"] == "loc1"
+        assert body["tagIds"] == ["tag1"]
+
+    @pytest.mark.asyncio
+    async def test_changes_land_under_the_api_names(self, client: MagicMock):
+        tool = UpdateItemTool()
+        params = tool.Params(
+            item_id="item1",
+            quantity=3,
+            purchasePrice=99.0,
+            modelNumber="DCD-999",
+            serialNumber="SN-2",
+            purchaseFrom="Online",
+            insured=False,
+            archived=True,
+            notes="",
+        )
+        await tool.execute(client, "test-token", params)
+
+        body = self.sent(client)
+        assert body["quantity"] == 3
+        assert body["purchasePrice"] == 99.0
+        assert body["modelNumber"] == "DCD-999"
+        assert body["serialNumber"] == "SN-2"
+        assert body["purchaseFrom"] == "Online"
+        assert body["insured"] is False
+        assert body["archived"] is True
+        assert body["notes"] == ""
+        assert body["manufacturer"] == "DeWalt"  # untouched
+
+    @pytest.mark.asyncio
+    async def test_an_unnumbered_item_stays_unnumbered(self, client: MagicMock):
+        """Sending "" makes Homebox store -1; the key is left out instead."""
+        client.get_item.return_value = {**CURRENT_ITEM, "assetId": ""}
+        tool = UpdateItemTool()
+        await tool.execute(client, "test-token", tool.Params(item_id="item1", notes="Fixed"))
+
+        assert "assetId" not in self.sent(client)
+
+    @pytest.mark.asyncio
+    async def test_moving_to_a_location_sticks(self, client: MagicMock):
+        tool = UpdateItemTool()
+        await tool.execute(client, "test-token", tool.Params(item_id="item1", location_id="loc2"))
+
+        assert self.sent(client)["parentId"] == "loc2"
+
+    @pytest.mark.asyncio
+    async def test_nesting_under_an_item_and_clearing_the_parent(self, client: MagicMock):
+        tool = UpdateItemTool()
+        await tool.execute(client, "test-token", tool.Params(item_id="item1", parent_id="item9"))
+        assert self.sent(client)["parentId"] == "item9"
+
+        client.update_item.reset_mock()
+        await tool.execute(client, "test-token", tool.Params(item_id="item1", clear_parent=True, location_id="loc2"))
+        assert self.sent(client)["parentId"] is None
+
+    @pytest.mark.asyncio
+    async def test_tags_are_replaced_only_when_given(self, client: MagicMock):
+        tool = UpdateItemTool()
+        await tool.execute(client, "test-token", tool.Params(item_id="item1", tag_ids=["tag1", "tag2"]))
+        assert self.sent(client)["tagIds"] == ["tag1", "tag2"]
+
+        client.update_item.reset_mock()
+        await tool.execute(client, "test-token", tool.Params(item_id="item1", tag_ids=[]))
+        assert self.sent(client)["tagIds"] == []
 
 
 # =============================================================================
