@@ -31,6 +31,11 @@ Environment Variables:
     HBC_CHAT_APPROVAL_TIMEOUT: Seconds before pending approvals expire (default: 300)
     HBC_PRINT_ENABLED: Enable the print label button in the UI (default: false).
         Requires HBOX_LABEL_MAKER_PRINT_COMMAND to be configured on the Homebox server.
+    HBC_ASSET_ID_LABEL_PATTERN: Regex a QR payload found in a photo must match, in full,
+        to be accepted as the item's asset ID (default: empty, label detection off).
+        For example ^9[0-9]{14}$ for any 15-digit id starting with 9.
+    HBC_ASSET_ID_HOMEBOX_LABELS: Also read the labels Homebox prints itself, the QR code
+        holding {homebox}/a/{asset id} (default: false). No pattern applies to these.
 
 AI Output Customization env vars (HBC_AI_*) are handled separately in
 field_preferences.py via FieldPreferencesDefaults.
@@ -136,6 +141,25 @@ class Settings(BaseSettings):
     chat_max_history: int = 20  # Max messages in conversation context
     chat_approval_timeout: int = 300  # Seconds before pending approvals expire
     chat_max_response_tokens: int = 0  # 0 = no limit (LLM decides naturally)
+
+    # Pre-printed asset ID labels
+    #
+    # A QR payload found in a photo is accepted as an asset ID only if it matches
+    # this pattern in full, after hyphens are removed (Homebox ignores them).
+    # Empty, the default, turns label detection off: the feature is opt-in and
+    # the pattern is yours to set for the labels you print. Keep it strict:
+    # product packaging is full of QR codes, and a loose pattern would file a
+    # marketing URL as an item's asset ID. For example, ^9[0-9]{14}$ accepts any
+    # 15-digit id starting with 9; [0-9] rather than \d so that only ASCII
+    # digits count.
+    asset_id_label_pattern: str = ""
+
+    # Also read the labels Homebox prints itself: its label maker and its label
+    # sheet generator put {homebox}/a/{asset id} in the QR code. The URL shape
+    # is proof enough, so no pattern applies to these, and any host is
+    # accepted, since an instance is often reached by more than one name. Off
+    # by default, like the pattern; either one turns detection on.
+    asset_id_homebox_labels: bool = False
 
     # Auth rate limiting (brute-force protection)
     auth_rate_limit_rpm: int = 10  # Login attempts per minute per IP

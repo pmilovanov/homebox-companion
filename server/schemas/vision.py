@@ -57,6 +57,13 @@ class DetectionResponse(BaseModel):
     compressed_images: list[CompressedImage] = Field(
         default_factory=list, description="Compressed versions of images for Homebox upload"
     )
+    detected_asset_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Asset IDs read from pre-printed QR labels visible in the photos, deduplicated. "
+            "Exactly one means the label belongs to the photographed item; several is ambiguous."
+        ),
+    )
 
 
 class AdvancedItemDetails(ItemExtendedFieldsMixin):
