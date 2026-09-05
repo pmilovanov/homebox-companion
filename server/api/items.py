@@ -8,7 +8,7 @@ from loguru import logger
 
 from homebox_companion import DetectedItem, HomeboxAuthError, HomeboxClient, settings
 from homebox_companion.ai.images import compress_image_for_upload
-from homebox_companion.homebox import ItemCreate
+from homebox_companion.homebox import ItemCreate, update_payload
 
 from ..dependencies import get_client, get_token, get_valid_tag_ids, validate_file_size
 from ..schemas.items import BatchCreateRequest
@@ -119,25 +119,22 @@ async def create_items(
                 if extended_payload or has_custom:
                     logger.debug(f"  Updating with extended fields: {extended_payload.keys()}")
                     try:
-                        # Get the full item to merge with extended fields
+                        # PUT replaces the whole item, so start from what Homebox
+                        # holds (including the asset ID it assigned at creation)
+                        # and lay the extended fields over it.
                         full_item = await client.get_item(token, item_id)
-                        # Merge extended fields into the full item data
-                        update_data = {
-                            "name": full_item.get("name"),
-                            "description": full_item.get("description"),
-                            "quantity": full_item.get("quantity"),
-                            "parentId": full_item.get("parent", {}).get("id"),
-                            "tagIds": [tag.get("id") for tag in full_item.get("tags", []) if tag.get("id")],
-                            **extended_payload,
-                        }
+                        update_data: dict[str, Any] = {**update_payload(full_item), **extended_payload}
                         # Include custom fields as typed Homebox ItemField objects
                         if item_input.custom_fields:
                             from homebox_companion.tools.vision.models import HomeboxItemField
 
                             update_data["fields"] = [
-                                HomeboxItemField(name=name, textValue=value).model_dump(by_alias=True)
-                                for name, value in item_input.custom_fields.items()
-                                if value  # skip empty/null values
+                                *update_data.get("fields", []),
+                                *(
+                                    HomeboxItemField(name=name, textValue=value).model_dump(by_alias=True)
+                                    for name, value in item_input.custom_fields.items()
+                                    if value  # skip empty/null values
+                                ),
                             ]
                         # Preserve parentId if it was set
                         if item_input.parent_id:
@@ -277,26 +274,23 @@ async def update_item(
     """Update an existing item in Homebox.
 
     Used to set asset ID after item creation (since asset ID cannot be set during creation).
-    Fetches the full item first to merge with update data.
+    Homebox's PUT replaces the whole item, so the body starts from everything
+    it currently holds and changes only what was asked for.
     """
     logger.info(f"Updating item: {item_id}")
     logger.debug(f"Update data: {request}")
 
-    # Fetch current item to get required fields
     full_item = await client.get_item(token, item_id)
+    update_data = update_payload(full_item)
 
-    # Build update payload with current values + updates
-    update_data = {
-        "name": full_item.get("name"),
-        "description": full_item.get("description", ""),
-        "quantity": full_item.get("quantity", 1),
-        "parentId": full_item.get("parent", {}).get("id"),
-        "tagIds": [tag.get("id") for tag in full_item.get("tags", []) if tag.get("id")],
-    }
-
-    # Apply requested updates (convert snake_case to camelCase for Homebox API)
     if "assetId" in request:
-        update_data["assetId"] = request["assetId"]
+        asset_id = str(request["assetId"] or "").strip()
+        if asset_id:
+            update_data["assetId"] = asset_id
+        else:
+            # Clearing: leave the key out so Homebox stores 0 (unassigned), not
+            # the -1 it makes of "" or the parse error it makes of null.
+            update_data.pop("assetId", None)
     if "name" in request:
         update_data["name"] = request["name"]
     if "description" in request:
