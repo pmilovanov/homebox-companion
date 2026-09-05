@@ -11,6 +11,7 @@
 import { vision, fieldPreferences } from '$lib/api/index';
 import { tagStore } from '$lib/stores/tags.svelte';
 import { workflowLogger as log } from '$lib/utils/logger';
+import { assetIdKey } from '$lib/utils/assetId';
 import type { CapturedImage, ReviewItem, Progress, ImageAnalysisStatus } from '$lib/types';
 
 // =============================================================================
@@ -178,6 +179,7 @@ export class AnalysisService {
 						image,
 						items: response.items,
 						compressedImages: response.compressed_images || [],
+						detectedAssetIds: response.detected_asset_ids,
 					};
 				} catch (error) {
 					// Re-throw abort errors to be handled at the top level
@@ -231,6 +233,24 @@ export class AnalysisService {
 				? this.defaultTagId
 				: null;
 
+		// The asset ID typed on a photo's capture card, under the single-item rule:
+		// a photo split into several items has nothing to attach one ID to.
+		const typedAssetId = (result: (typeof results)[number]): string | undefined =>
+			result.success && !result.image.separateItems && result.items.length === 1
+				? result.image.assetId?.trim() || undefined
+				: undefined;
+
+		// IDs already handed to an item in this batch. Seeded with the typed ones,
+		// so a label matching an ID someone typed is not handed out as well: the
+		// typed one wins. The same sticker showing up in two photos means two
+		// shots of one item, not two items.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- Local accumulator, not reactive state
+		const assignedIds = new Set<string>();
+		for (const result of results) {
+			const typed = typedAssetId(result);
+			if (typed) assignedIds.add(assetIdKey(typed));
+		}
+
 		// Process results
 		for (const result of results) {
 			if (result.success) {
@@ -240,6 +260,35 @@ export class AnalysisService {
 				// First compressed image is the primary, rest are additional
 				const primaryCompressed = compressedImages[0];
 				const additionalCompressed = compressedImages.slice(1);
+
+				// Which asset ID this photo's item gets, if any: the typed one wins.
+				// Failing that, a label read from the photo applies when the photo
+				// yielded exactly one item and exactly one label was seen: one item,
+				// one sticker, nothing to disambiguate. Several labels, or several
+				// items, is left blank for the review screen rather than guessed.
+				const manualAssetId = typedAssetId(result);
+				let assetId = manualAssetId;
+				let assetIdDetected = false;
+				let assetIdDuplicate = false;
+				const labels = result.detectedAssetIds;
+				if (!assetId && labels.length === 1 && result.items.length === 1) {
+					const label = labels[0];
+					if (assignedIds.has(assetIdKey(label))) {
+						assetIdDuplicate = true;
+						log.warn(
+							`Label ${label} in image ${result.imageIndex + 1} is already on another item in this batch; leaving blank`
+						);
+					} else {
+						assignedIds.add(assetIdKey(label));
+						assetId = label;
+						assetIdDetected = true;
+						log.info(`Image ${result.imageIndex + 1}: asset ID ${label} read from label`);
+					}
+				} else if (labels.length > 0) {
+					log.info(
+						`Image ${result.imageIndex + 1}: ${labels.length} label(s) seen but not assigned (${result.items.length} item(s), manual=${manualAssetId ?? 'none'})`
+					);
+				}
 
 				for (const item of result.items) {
 					// Add default tag if configured and valid
@@ -266,11 +315,9 @@ export class AnalysisService {
 						compressedDataUrl,
 						compressedAdditionalDataUrls:
 							compressedAdditionalDataUrls.length > 0 ? compressedAdditionalDataUrls : undefined,
-						// Copy asset_id from source image (only for single-item mode)
-						asset_id:
-							!result.image.separateItems && result.items.length === 1
-								? (result.image.assetId ?? undefined)
-								: undefined,
+						asset_id: assetId,
+						asset_id_detected: assetIdDetected || undefined,
+						asset_id_duplicate: assetIdDuplicate || undefined,
 					});
 				}
 			}

@@ -56,6 +56,8 @@ export interface StoredReviewItem extends ItemCore, ItemExtended {
 	compressedAdditionalDataUrls?: string[];
 	/** Duplicate match info if serial matches an existing item */
 	duplicate_match?: DuplicateMatch | null;
+	asset_id_detected?: boolean;
+	asset_id_duplicate?: boolean;
 }
 
 /** Serializable version of ConfirmedItem */
@@ -236,6 +238,8 @@ export function serializeReviewItem(item: ReviewItem): StoredReviewItem {
 		compressedDataUrl: item.compressedDataUrl,
 		compressedAdditionalDataUrls: item.compressedAdditionalDataUrls,
 		duplicate_match: item.duplicate_match,
+		asset_id_detected: item.asset_id_detected,
+		asset_id_duplicate: item.asset_id_duplicate,
 	};
 }
 
@@ -343,6 +347,8 @@ export async function deserializeReviewItem(stored: StoredReviewItem): Promise<R
 		compressedDataUrl: stored.compressedDataUrl,
 		compressedAdditionalDataUrls: stored.compressedAdditionalDataUrls,
 		duplicate_match: stored.duplicate_match,
+		asset_id_detected: stored.asset_id_detected,
+		asset_id_duplicate: stored.asset_id_duplicate,
 	};
 }
 

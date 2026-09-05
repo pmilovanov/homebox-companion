@@ -372,6 +372,24 @@ When enabled, a print button appears on the post-creation screen for each item. 
 </details>
 
 <details>
+<summary>🏷️ Pre-printed Asset ID Labels</summary>
+
+Items that already carry an asset ID label, a QR code stuck on ahead of time, are recognised during intake: if the label is visible in a photo, its ID is read and pre-filled as the item's asset ID on the review screen, marked as read from the label. You can still type or scan one by hand. Off until you turn on one of the two kinds below.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HBC_ASSET_ID_HOMEBOX_LABELS` | `false` | Read the labels Homebox prints itself: a QR code holding `{homebox}/a/{asset id}`. Any host; no pattern applies. |
+| `HBC_ASSET_ID_LABEL_PATTERN` | *(empty)* | Regex a bare QR payload must match, in full, to be accepted as an asset ID, for labels you print yourself. Empty accepts none. |
+
+**Homebox's own labels.** Homebox's label maker and its label sheet generator put `https://your-homebox/a/000-013` in the QR code. With `HBC_ASSET_ID_HOMEBOX_LABELS=true` such a URL is read as the asset ID on its shape alone, from any host, since an instance is often reached by more than one name. The "Page URL" QR Homebox shows for an item (`/item/{uuid}`) is a link, not a label, and is ignored.
+
+**Your own labels.** Keep the pattern strict: product packaging is full of QR codes, and a loose pattern would file a marketing URL as an item's asset ID. For example, `^9[0-9]{14}$` accepts any 15-digit id starting with 9. Both a bare ID and a Homebox `/a/{id}` URL are accepted. Hyphens are removed before matching, because Homebox ignores them.
+
+A label seen in both the main photo and a close-up counts once. Several different labels in one photo's set is ambiguous and left blank. An ID already given to an earlier item in the batch is flagged on the review screen instead of being applied twice.
+
+</details>
+
+<details>
 <summary>AI Output Customization</summary>
 
 Customize how AI formats detected item fields. Set via environment variables or the Settings page (UI takes priority).

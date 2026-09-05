@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from homebox_companion import settings
+from homebox_companion.tools.vision.labels import LabelPolicy
 
 router = APIRouter()
 
@@ -23,6 +24,8 @@ class ConfigResponse(BaseModel):
     capture_max_images: int
     capture_max_file_size_mb: int
     print_enabled: bool
+    # Whether a QR label visible in a photo is read as the item's asset ID.
+    asset_id_labels_enabled: bool
 
 
 @router.get("/config", response_model=ConfigResponse)
@@ -43,4 +46,5 @@ async def get_config() -> ConfigResponse:
         capture_max_images=settings.capture_max_images,
         capture_max_file_size_mb=settings.capture_max_file_size_mb,
         print_enabled=settings.print_enabled,
+        asset_id_labels_enabled=LabelPolicy.from_settings(settings).enabled,
     )
