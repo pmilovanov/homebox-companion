@@ -12,6 +12,7 @@ import time
 import uuid
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -31,6 +32,58 @@ def _configure_loguru_for_tests():
     logger.add(sys.stderr, level="DEBUG")
     yield
     logger.remove()
+
+
+# ---------------------------------------------------------------------------
+# Canned Homebox responses
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def full_item() -> dict[str, Any]:
+    """A ``GET /entities/{id}`` response with every field a ``PUT`` wipes when left out.
+
+    Shared by the route and chat-tool tests that assert the exact body sent
+    back to Homebox. A fresh copy per test: the fakes mutate it.
+    """
+    return {
+        "id": "item-1",
+        "assetId": "000-042",
+        "name": "Drill",
+        "description": "Cordless",
+        "quantity": 2,
+        "insured": True,
+        "archived": False,
+        "serialNumber": "SN-1",
+        "modelNumber": "DCD-777",
+        "manufacturer": "DeWalt",
+        "lifetimeWarranty": False,
+        "warrantyExpires": "2027-05-01",
+        "warrantyDetails": "3 years",
+        "purchaseDate": "2024-05-01",
+        "purchaseFrom": "Hardware store",
+        "purchasePrice": 129.5,
+        "soldDate": "",
+        "soldTo": "",
+        "soldPrice": 0,
+        "soldNotes": "",
+        "notes": "Scuffed",
+        "syncChildEntityLocations": False,
+        "fields": [
+            {
+                "id": "field-1",
+                "type": "text",
+                "name": "Color",
+                "textValue": "yellow",
+                "numberValue": 0,
+                "booleanValue": False,
+            }
+        ],
+        "parent": {"id": "loc-1", "name": "Garage"},
+        "tags": [{"id": "tag-1", "name": "Tools"}],
+        "attachments": [],
+        "createdAt": "2024-05-01T00:00:00Z",
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 from pydantic import Field
 
+from ..homebox.payloads import update_payload
 from ..homebox.views import CompactItemView, ItemView, LocationView, add_tree_urls
 from .types import Tool, ToolParams, ToolPermission, ToolResult
 
@@ -705,55 +706,38 @@ class UpdateItemTool:
         token: str,
         params: Params,
     ) -> ToolResult:
-        # First get the current item to preserve unchanged fields
+        # PUT /entities/{id} replaces the whole item, so start from everything
+        # Homebox currently holds and overwrite only what was asked for.
         current = await client.get_item(token, params.item_id)
+        update_data = update_payload(current)
 
-        # Build update payload preserving unchanged fields from current item
-        update_data = {
-            "id": params.item_id,
-            "name": params.name if params.name is not None else current.get("name"),
-            "description": (params.description if params.description is not None else current.get("description", "")),
-            "quantity": params.quantity if params.quantity is not None else current.get("quantity", 1),
-            "insured": params.insured if params.insured is not None else current.get("insured", False),
-            "archived": params.archived if params.archived is not None else current.get("archived", False),
-            "assetId": current.get("assetId", ""),
-            "notes": params.notes if params.notes is not None else current.get("notes", ""),
-            "manufacturer": params.manufacturer if params.manufacturer is not None else current.get("manufacturer", ""),
-            "modelNumber": params.model_number if params.model_number is not None else current.get("modelNumber", ""),
-            "serialNumber": (
-                params.serial_number if params.serial_number is not None else current.get("serialNumber", "")
-            ),
-            "purchaseFrom": (
-                params.purchase_from if params.purchase_from is not None else current.get("purchaseFrom", "")
-            ),
+        changes = {
+            "name": params.name,
+            "description": params.description,
+            "quantity": params.quantity,
+            "insured": params.insured,
+            "archived": params.archived,
+            "notes": params.notes,
+            "manufacturer": params.manufacturer,
+            "modelNumber": params.model_number,
+            "serialNumber": params.serial_number,
+            "purchaseFrom": params.purchase_from,
+            "purchasePrice": params.purchase_price,
         }
+        update_data.update({key: value for key, value in changes.items() if value is not None})
 
-        # Handle purchasePrice - use new value if provided, else preserve current
-        if params.purchase_price is not None:
-            update_data["purchasePrice"] = params.purchase_price
-        elif current.get("purchasePrice") is not None:
-            update_data["purchasePrice"] = current.get("purchasePrice")
-
-        # Handle location - use new location_id if provided, else preserve current
-        if params.location_id is not None:
-            update_data["parentId"] = params.location_id
-        elif current.get("parent"):
-            update_data["parentId"] = current["parent"].get("id")
-
-        # Handle tags - use correct API field name "tagIds" with flat string array
+        # tagIds replaces the whole tag list; None keeps the current one.
         if params.tag_ids is not None:
             update_data["tagIds"] = params.tag_ids
-        elif current.get("tags"):
-            # Preserve existing tags using correct format
-            update_data["tagIds"] = [tag.get("id") for tag in current["tags"] if tag.get("id")]
 
-        # Handle parent - determine parentId based on clear_parent flag
+        # location_id and parent_id both set parentId (an item nests under a
+        # location or under another item the same way); clear_parent wins.
         if params.clear_parent:
             update_data["parentId"] = None
         elif params.parent_id is not None:
             update_data["parentId"] = params.parent_id
-        else:
-            update_data["parentId"] = current.get("parent", {}).get("id")
+        elif params.location_id is not None:
+            update_data["parentId"] = params.location_id
 
         result = await client.update_item(token, params.item_id, update_data)
         logger.info(f"update_item updated item: {result.get('name', 'unknown')}")
