@@ -21,6 +21,7 @@ from .prompts import (
     build_extended_fields_schema,
     build_item_schema,
     build_naming_examples,
+    build_purpose,
     build_tag_prompt,
 )
 
@@ -40,6 +41,7 @@ __all__ = [
     "ModelCapabilities",
     "get_model_capabilities",
     # Prompts
+    "build_purpose",
     "build_tag_prompt",
     "build_item_schema",
     "build_extended_fields_schema",

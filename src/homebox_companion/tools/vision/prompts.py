@@ -11,6 +11,7 @@ from ...ai.prompts import (
     build_item_schema,
     build_language_instruction,
     build_naming_examples,
+    build_purpose,
     build_tag_prompt,
 )
 
@@ -63,6 +64,7 @@ def build_detection_system_prompt(
         # 1. Role + output format
         "You are an inventory assistant for the Homebox API. "
         "Return a JSON object with an `items` array.\n"
+        f"{build_purpose()}\n"
         # 2. Language instruction (if not English)
         f"{language_instr}\n"
         # 3. Critical constraints FIRST
@@ -120,7 +122,7 @@ def build_detection_user_prompt(
         "List items that are the focus of this image. Return only JSON. "
         "Example: "
         '{"items":[{"name":"Claw Hammer","quantity":2,'
-        f'"description":"Steel claw hammer","tagIds":["id1"]{extended_example}'
+        f'"description":"Steel claw hammer","tagIds":[]{extended_example}'
         "}]}." + user_hint
     )
 
@@ -168,6 +170,7 @@ def build_multi_image_system_prompt(
         # 1. Role + output format
         f"You are an inventory assistant for the Homebox API. {multi_note} "
         "Return a JSON object with an `items` array.\n"
+        f"{build_purpose()}\n"
         # 2. Language instruction (if not English)
         f"{language_instr}\n"
         # 3. Critical constraints FIRST
@@ -219,6 +222,7 @@ def build_discriminatory_system_prompt(
         # 1. Role + critical constraint
         "You are an inventory assistant. Identify items with MAXIMUM SPECIFICITY. "
         "Do NOT group similar items - list each distinct variant separately.\n"
+        f"{build_purpose()}\n"
         # 2. Language instruction (if not English)
         f"{language_instr}\n"
         # 3. Specificity rules (critical for this mode)
@@ -300,6 +304,7 @@ def build_analysis_system_prompt(
     return (
         # 1. Role + task
         f"You are an inventory assistant analyzing images. {item_context}\n"
+        f"{build_purpose()}\n"
         # 2. Language instruction (if not English)
         f"{language_instr}\n"
         # 3. Critical instruction
@@ -314,7 +319,7 @@ def build_analysis_system_prompt(
         f"- manufacturer: string or null ({mfr_instr})\n"
         f"- purchasePrice: number or null ({price_instr})\n"
         f"- notes: string or null ({notes_instr})\n"
-        "- tagIds: array of applicable tag IDs\n"
+        "- tagIds: array of tag IDs; empty unless a tag clearly applies\n"
         f"{custom_schema}\n\n"
         # 5. Naming
         f"{naming_examples}\n\n"

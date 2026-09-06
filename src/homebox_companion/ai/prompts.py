@@ -39,6 +39,22 @@ def build_custom_fields_schema(custom_fields: list[CustomFieldDefinition]) -> st
     return "\n".join(lines)
 
 
+def build_purpose() -> str:
+    """Tell the model what the inventory is *for* before telling it what to output.
+
+    Without this, the model has only "inventory assistant for the Homebox API" to go
+    on and falls back to describing the photograph: the cable's QR label, the cat's
+    ear position. Deliberately generic (possessions, owner) so it fits a workshop as
+    well as a home.
+    """
+    return (
+        "PURPOSE: You are cataloguing possessions for an inventory. Each entry exists so its owner "
+        "can find the item later and know what to replace if it is lost or damaged. Describe the "
+        "thing itself, as it is on any day: not this photograph, and not the item's current state, "
+        "pose or surroundings."
+    )
+
+
 def build_critical_constraints(single_item: bool = False) -> str:
     """Build critical constraints that MUST appear early in prompt.
 
@@ -118,7 +134,7 @@ def build_item_schema(customizations: dict[str, str]) -> str:
 - name: string ({name_instr})
 - quantity: integer ({qty_instr})
 - description: string ({desc_instr})
-- tagIds: array of matching tag IDs"""
+- tagIds: array of tag IDs; empty unless a tag clearly applies"""
 
 
 def build_extended_fields_schema(customizations: dict[str, str]) -> str:
@@ -165,7 +181,11 @@ def build_tag_prompt(tags: list[dict[str, str]] | None) -> str:
     if not tag_lines:
         return "No tags available; omit tagIds."
 
-    return "TAGS - Assign matching IDs to each item:\n" + "\n".join(tag_lines)
+    return (
+        "TAGS (optional) - Assign a tag only when the item unmistakably belongs to it. "
+        "When in doubt assign none: an empty tagIds is the normal result, not a failure, "
+        "and the tag that merely comes closest is wrong.\n" + "\n".join(tag_lines)
+    )
 
 
 def build_language_instruction(output_language: str | None) -> str:

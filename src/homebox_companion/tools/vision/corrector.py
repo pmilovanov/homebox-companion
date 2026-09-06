@@ -13,6 +13,7 @@ from ...ai.prompts import (
     build_item_schema,
     build_language_instruction,
     build_naming_examples,
+    build_purpose,
     build_tag_prompt,
 )
 from ...ai.response_models import get_items_response_model
@@ -72,6 +73,7 @@ async def correct_item(
         # 1. Role
         "You are an inventory assistant correcting item detection errors. "
         "Return a JSON object with an `items` array.\n"
+        f"{build_purpose()}\n"
         # 2. Language instruction (if not English)
         f"{language_instr}\n"
         # 3. Critical correction rules
