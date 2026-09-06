@@ -227,6 +227,15 @@ class TestBuildTagPrompt:
         assert "omit tagIds" in result_none
         assert "No tags" in result_empty
 
+    def test_says_a_tag_is_optional_and_none_is_normal(self) -> None:
+        """A baby is not an Appliance. The model must be told that no tag is the usual answer,
+        or it picks whichever tag comes closest to anything it cannot place."""
+        result = build_tag_prompt([{"id": "tag-1", "name": "Appliances"}])
+
+        assert "optional" in result.lower()
+        assert "assign none" in result
+        assert "closest" in result
+
     def test_filters_invalid_tags(self) -> None:
         """Should filter out tags missing id or name."""
         tags = [
